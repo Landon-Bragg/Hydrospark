@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { getBills } from '../services/api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../context/AuthContext';
 
 function Bills() {
+  const { user } = useAuth();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,6 +34,66 @@ function Bills() {
       'overdue': 'bg-red-100 text-red-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  // Generate a single PDF containing every bill in the list
+  const handleDownloadAllStatements = () => {
+    const customer = user?.customer;
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(0, 75, 135);
+    doc.text('HYDROSPARK WATER CO.', 14, 20);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text('Official Billing Statement', 14, 28);
+    doc.text('Invoice Date: ' + new Date().toLocaleDateString(), 14, 33);
+
+    // Customer info
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.setFont(undefined, 'bold');
+    doc.text('BILL TO:', 14, 45);
+    doc.setFont(undefined, 'normal');
+    if (customer) {
+      doc.text(customer.customer_name, 14, 53);
+      doc.text('Location ID: ' + customer.location_id, 14, 59);
+      doc.text(customer.mailing_address || 'No Address on File', 14, 65);
+    }
+
+    // Summary totals
+    const totalAmount = bills.reduce((sum, b) => sum + parseFloat(b.total_amount), 0);
+    const totalUsage = bills.reduce((sum, b) => sum + parseFloat(b.total_usage_ccf), 0);
+
+    doc.setFontSize(11);
+    doc.setTextColor(80);
+    doc.text('Total Bills: ' + bills.length, 14, 77);
+    doc.text('Total Usage: ' + totalUsage.toFixed(2) + ' CCF', 14, 83);
+    doc.text('Total Amount: $' + totalAmount.toFixed(2), 14, 89);
+
+    // Full bill history table with every row
+    autoTable(doc, {
+      startY: 99,
+      head: [['Billing Period', 'Usage (CCF)', 'Amount', 'Due Date', 'Status']],
+      body: bills.map(b => [
+        b.billing_period_start + ' to ' + b.billing_period_end,
+        parseFloat(b.total_usage_ccf).toFixed(2),
+        '$' + parseFloat(b.total_amount).toFixed(2),
+        b.due_date,
+        b.status.toUpperCase()
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [0, 75, 135] },
+      styles: { fontSize: 10 }
+    });
+
+    const filename = customer
+      ? 'HydroSpark_Statement_' + customer.customer_name.replace(/\s+/g, '_') + '.pdf'
+      : 'HydroSpark_Statement.pdf';
+
+    doc.save(filename);
   };
 
   if (loading) return <div className="text-center py-10">Loading bills...</div>;
@@ -73,8 +137,16 @@ function Bills() {
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Bill History</h2>
-            
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Bill History</h2>
+              <button
+                onClick={handleDownloadAllStatements}
+                className="text-white bg-hydro-deep-aqua border border-hydro-deep-aqua px-4 py-2 rounded text-sm font-semibold hover:opacity-90 transition"
+              >
+                📄 Download Full Statement
+              </button>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead className="bg-gray-50">
