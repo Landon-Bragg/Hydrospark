@@ -47,6 +47,7 @@ export const getMeterReadings = (params) => api.get('/meter/readings', { params 
 
 // Admin
 export const getUsers = () => api.get('/admin/users');
+export const getAdminCharges = () => api.get('/admin/charges');
 export const approveUser = (id) => api.post(`/admin/users/${id}/approve`);
 export const createUser = (data) => api.post('/admin/users', data);
 export const importData = (formData) => api.post('/admin/import/usage', formData, {

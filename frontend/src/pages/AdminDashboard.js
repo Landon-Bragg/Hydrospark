@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { importData } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { importData, getAdminCharges } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -11,6 +11,27 @@ function AdminDashboard() {
   const [anomalyResult, setAnomalyResult] = useState(null);
   const [billResult, setBillResult] = useState(null);
   const [error, setError] = useState(null);
+  const [charges, setCharges] = useState([]);
+  const [chargesLoading, setChargesLoading] = useState(false);
+  const [chargesError, setChargesError] = useState(null);
+  const [expandedCustomer, setExpandedCustomer] = useState(null);
+  const [chargesSearch, setChargesSearch] = useState('');
+
+  useEffect(() => {
+    const fetchCharges = async () => {
+      setChargesLoading(true);
+      setChargesError(null);
+      try {
+        const response = await getAdminCharges();
+        setCharges(response.data.customers);
+      } catch (err) {
+        setChargesError(err.response?.data?.error || 'Failed to load charges');
+      } finally {
+        setChargesLoading(false);
+      }
+    };
+    fetchCharges();
+  }, []);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -243,6 +264,153 @@ function AdminDashboard() {
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* Charges by User */}
+      <div className="card mt-6">
+        <h2 className="text-xl font-semibold mb-4">Charges by User</h2>
+
+        {chargesError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {chargesError}
+          </div>
+        )}
+
+        {chargesLoading ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-hydro-spark-blue"></div>
+            <p className="text-sm text-gray-600 mt-2">Loading charges...</p>
+          </div>
+        ) : (
+          <>
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              value={chargesSearch}
+              onChange={(e) => setChargesSearch(e.target.value)}
+              className="input-field mb-4 w-full max-w-sm"
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-hydro-sky-blue text-left">
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Customer</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Email</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Type</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Bills</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Total Charges</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Status Summary</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {charges
+                    .filter((c) => {
+                      const q = chargesSearch.toLowerCase();
+                      return (
+                        !q ||
+                        (c.customer_name || '').toLowerCase().includes(q) ||
+                        (c.email || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .map((customer) => (
+                      <>
+                        <tr
+                          key={customer.customer_id}
+                          className="border-b hover:bg-gray-50 cursor-pointer"
+                          onClick={() =>
+                            setExpandedCustomer(
+                              expandedCustomer === customer.customer_id ? null : customer.customer_id
+                            )
+                          }
+                        >
+                          <td className="px-4 py-3 font-medium">{customer.customer_name || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{customer.email || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{customer.customer_type || '—'}</td>
+                          <td className="px-4 py-3 text-right">{customer.bill_count}</td>
+                          <td className="px-4 py-3 text-right font-semibold">
+                            ${customer.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1 flex-wrap">
+                              {Object.entries(customer.status_counts).map(([status, count]) => (
+                                <span
+                                  key={status}
+                                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    status === 'paid'
+                                      ? 'bg-green-100 text-green-700'
+                                      : status === 'overdue'
+                                      ? 'bg-red-100 text-red-700'
+                                      : status === 'sent'
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                                  }`}
+                                >
+                                  {count} {status}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-400 text-right">
+                            {expandedCustomer === customer.customer_id ? '▲' : '▼'}
+                          </td>
+                        </tr>
+                        {expandedCustomer === customer.customer_id && (
+                          <tr key={`${customer.customer_id}-bills`}>
+                            <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-left text-gray-500 border-b">
+                                    <th className="pb-1 pr-4">Period</th>
+                                    <th className="pb-1 pr-4">Usage (CCF)</th>
+                                    <th className="pb-1 pr-4">Amount</th>
+                                    <th className="pb-1 pr-4">Due Date</th>
+                                    <th className="pb-1">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {customer.bills.map((bill) => (
+                                    <tr key={bill.id} className="border-b border-gray-100">
+                                      <td className="py-1.5 pr-4">
+                                        {bill.billing_period_start} – {bill.billing_period_end}
+                                      </td>
+                                      <td className="py-1.5 pr-4">{parseFloat(bill.total_usage_ccf).toFixed(2)}</td>
+                                      <td className="py-1.5 pr-4 font-medium">
+                                        ${parseFloat(bill.total_amount).toFixed(2)}
+                                      </td>
+                                      <td className="py-1.5 pr-4 text-gray-600">{bill.due_date}</td>
+                                      <td className="py-1.5">
+                                        <span
+                                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                            bill.status === 'paid'
+                                              ? 'bg-green-100 text-green-700'
+                                              : bill.status === 'overdue'
+                                              ? 'bg-red-100 text-red-700'
+                                              : bill.status === 'sent'
+                                              ? 'bg-blue-100 text-blue-700'
+                                              : 'bg-yellow-100 text-yellow-700'
+                                          }`}
+                                        >
+                                          {bill.status}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                </tbody>
+              </table>
+              {charges.length === 0 && !chargesLoading && (
+                <p className="text-center text-gray-500 py-6">No charges found.</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* System Info */}

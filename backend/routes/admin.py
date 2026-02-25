@@ -4,7 +4,7 @@ Admin routes - User management, data import
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, AuditLog
+from database import db, User, Customer, AuditLog, Bill
 from services.data_import_service import DataImportService
 from datetime import datetime
 import bcrypt
@@ -107,6 +107,47 @@ def create_user():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/charges', methods=['GET'])
+@jwt_required()
+def get_charges_by_user():
+    """Get all bills grouped by customer/user"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        customers = Customer.query.all()
+        result = []
+        for customer in customers:
+            bills = Bill.query.filter_by(customer_id=customer.id).order_by(Bill.billing_period_end.desc()).all()
+            total_amount = sum(float(b.total_amount) for b in bills)
+            status_counts = {}
+            for b in bills:
+                status_counts[b.status] = status_counts.get(b.status, 0) + 1
+
+            email = customer.user.email if customer.user else None
+
+            result.append({
+                'customer_id': customer.id,
+                'customer_name': customer.customer_name,
+                'email': email,
+                'customer_type': customer.customer_type,
+                'location_id': customer.location_id,
+                'bill_count': len(bills),
+                'total_amount': round(total_amount, 2),
+                'status_counts': status_counts,
+                'bills': [b.to_dict() for b in bills],
+            })
+
+        result.sort(key=lambda c: c['customer_name'] or '')
+
+        return jsonify({'customers': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @admin_bp.route('/import/usage', methods=['POST'])
 @jwt_required()
