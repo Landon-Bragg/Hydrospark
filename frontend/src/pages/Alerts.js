@@ -94,7 +94,7 @@ function Alerts() {
             <div key={alert.id} className={`card border-l-4 ${getAlertColor(alert.alert_type)}`}>
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-1">
                     <h3 className="text-lg font-bold text-gray-800 capitalize">
                       {alert.alert_type.replace('_', ' ')}
                     </h3>
@@ -102,7 +102,16 @@ function Alerts() {
                       Risk: {parseFloat(alert.risk_score).toFixed(0)}%
                     </span>
                   </div>
-                  
+
+                  {(alert.customer_name || alert.customer_email) && (
+                    <div className="text-sm text-gray-600 mb-2">
+                      <span className="font-medium">{alert.customer_name}</span>
+                      {alert.customer_email && (
+                        <span className="ml-2 text-gray-400">{alert.customer_email}</span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <p className="text-gray-600">Date</p>

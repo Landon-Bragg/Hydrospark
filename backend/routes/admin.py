@@ -274,6 +274,38 @@ def delete_zip_rate(rate_id):
         return jsonify({'error': str(e)}), 500
 
 
+@admin_bp.route('/detect', methods=['POST'])
+@jwt_required()
+def detect_anomalies():
+    """Run anomaly detection for all customers (admin only)"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        from services.ml_service import MLService
+        ml_service = MLService()
+
+        customers = Customer.query.all()
+        results = []
+        for customer in customers:
+            customer_results = ml_service.detect_anomalies(customer.id)
+            results.extend(customer_results)
+
+        return jsonify({
+            'message': f'Detected {len(results)} anomalies',
+            'anomalies': results
+        }), 200
+
+    except Exception as e:
+        print(f"Anomaly detection error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @admin_bp.route('/import/usage', methods=['POST'])
 @jwt_required()
 def import_usage_data():

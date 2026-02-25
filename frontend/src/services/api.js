@@ -39,12 +39,6 @@ export const getBill = (id) => api.get(`/billing/bills/${id}`);
 export const getAlerts = (params) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id) => api.post(`/alerts/${id}/acknowledge`);
 
-// Meter Reading
-export const uploadMeterPhoto = (formData) => api.post('/meter/upload', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-});
-export const getMeterReadings = (params) => api.get('/meter/readings', { params });
-
 // Admin
 export const getUsers = () => api.get('/admin/users');
 export const getAdminCharges = () => api.get('/admin/charges');

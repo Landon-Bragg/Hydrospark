@@ -29,15 +29,25 @@ def get_alerts():
         query = AnomalyAlert.query
         if customer_id:
             query = query.filter_by(customer_id=customer_id)
-        
+
         status = request.args.get('status')
         if status:
             query = query.filter_by(status=status)
-        
-        alerts = query.order_by(AnomalyAlert.created_at.desc()).all()
-        
+
+        alerts = query.order_by(AnomalyAlert.alert_date.desc()).all()
+
+        def alert_dict(alert):
+            d = alert.to_dict()
+            if alert.customer:
+                d['customer_name'] = alert.customer.customer_name
+                d['customer_email'] = alert.customer.user.email if alert.customer.user else None
+            else:
+                d['customer_name'] = None
+                d['customer_email'] = None
+            return d
+
         return jsonify({
-            'alerts': [a.to_dict() for a in alerts]
+            'alerts': [alert_dict(a) for a in alerts]
         }), 200
         
     except Exception as e:

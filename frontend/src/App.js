@@ -8,7 +8,6 @@ import Usage from './pages/Usage';
 import Forecasts from './pages/Forecasts';
 import Bills from './pages/Bills';
 import Alerts from './pages/Alerts';
-import MeterUpload from './pages/MeterUpload';
 import AdminDashboard from './pages/AdminDashboard';
 import Layout from './components/Layout';
 
@@ -46,9 +45,8 @@ function App() {
             <Route path="usage" element={<Usage />} />
             <Route path="forecasts" element={<Forecasts />} />
             <Route path="bills" element={<Bills />} />
-            <Route path="alerts" element={<Alerts />} />
-            <Route path="meter-upload" element={<MeterUpload />} />
-            <Route path="admin" element={<PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute>} />
+            <Route path="alerts" element={<PrivateRoute requiredRole="admin"><Alerts /></PrivateRoute>} />
+<Route path="admin" element={<PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute>} />
           </Route>
         </Routes>
       </Router>

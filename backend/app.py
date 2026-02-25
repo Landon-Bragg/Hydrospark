@@ -86,7 +86,6 @@ from routes.usage import usage_bp
 from routes.billing import billing_bp
 from routes.forecasts import forecasts_bp
 from routes.alerts import alerts_bp
-from routes.meter_reading import meter_bp
 from routes.admin import admin_bp
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -95,7 +94,6 @@ app.register_blueprint(usage_bp, url_prefix='/api/usage')
 app.register_blueprint(billing_bp, url_prefix='/api/billing')
 app.register_blueprint(forecasts_bp, url_prefix='/api/forecasts')
 app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
-app.register_blueprint(meter_bp, url_prefix='/api/meter')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
 @app.route('/api/health', methods=['GET'])
@@ -120,8 +118,7 @@ def index():
             'billing': '/api/billing',
             'forecasts': '/api/forecasts',
             'alerts': '/api/alerts',
-            'meter': '/api/meter',
-            'admin': '/api/admin'
+'admin': '/api/admin'
         }
     })
 
