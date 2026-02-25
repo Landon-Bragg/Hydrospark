@@ -67,7 +67,7 @@ class MLService:
                 is_active=True
             ).first()
             
-            billing_rate = float(rate.flat_rate) if rate else 2.50
+            billing_rate = float(rate.flat_rate) if rate else 5.72
             
             # Generate forecasts for next N months
             forecasts = []

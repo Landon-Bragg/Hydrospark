@@ -2,11 +2,32 @@
 Billing calculation service
 """
 
-from database import db, Customer, WaterUsage, BillingRate, Bill
+from database import db, Customer, WaterUsage, BillingRate, Bill, ZipCodeRate
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
 class BillingService:
+    def _resolve_rate(self, customer):
+        """Resolve effective rate for a customer.
+        Priority: customer override > zip code rate > customer-type rate > default."""
+        if customer.custom_rate_per_ccf is not None:
+            return float(customer.custom_rate_per_ccf)
+
+        if customer.zip_code:
+            zip_rate = ZipCodeRate.query.filter_by(
+                zip_code=customer.zip_code, is_active=True
+            ).first()
+            if zip_rate:
+                return float(zip_rate.rate_per_ccf)
+
+        type_rate = BillingRate.query.filter_by(
+            customer_type=customer.customer_type, is_active=True
+        ).first()
+        if type_rate:
+            return float(type_rate.flat_rate)
+
+        return 5.72  # Default fallback
+
     def calculate_bill(self, customer_id, start_date, end_date):
         """Calculate bill for period"""
         # Get total usage
@@ -15,22 +36,13 @@ class BillingService:
             WaterUsage.usage_date >= start_date,
             WaterUsage.usage_date <= end_date
         ).scalar() or 0
-        
-        # Get customer type
+
+        # Get customer
         customer = Customer.query.get(customer_id)
         if not customer:
             return None
-        
-        # Get rate
-        rate = BillingRate.query.filter_by(
-            customer_type=customer.customer_type,
-            is_active=True
-        ).first()
-        
-        if not rate:
-            rate_value = 2.50  # Default
-        else:
-            rate_value = float(rate.flat_rate)
+
+        rate_value = self._resolve_rate(customer)
         
         total_amount = float(total_usage) * rate_value
         
@@ -54,14 +66,8 @@ class BillingService:
             # Calculate usage since last bill
             estimated_usage = meter_reading - float(last_bill.total_usage_ccf)
         
-        # Get rate
         customer = Customer.query.get(customer_id)
-        rate = BillingRate.query.filter_by(
-            customer_type=customer.customer_type,
-            is_active=True
-        ).first()
-        
-        rate_value = float(rate.flat_rate) if rate else 2.50
+        rate_value = self._resolve_rate(customer)
         estimated_amount = estimated_usage * rate_value
         
         return {

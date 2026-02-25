@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -17,6 +17,18 @@ function AdminDashboard() {
   const [expandedCustomer, setExpandedCustomer] = useState(null);
   const [chargesSearch, setChargesSearch] = useState('');
 
+  // Per-customer rate editing
+  const [editingRateFor, setEditingRateFor] = useState(null); // customer_id
+  const [rateEditValues, setRateEditValues] = useState({ custom_rate_per_ccf: '', zip_code: '' });
+  const [rateSaving, setRateSaving] = useState(false);
+
+  // Zip code rates
+  const [zipRates, setZipRates] = useState([]);
+  const [zipRatesLoading, setZipRatesLoading] = useState(false);
+  const [zipRateForm, setZipRateForm] = useState({ zip_code: '', rate_per_ccf: '', description: '' });
+  const [editingZipRate, setEditingZipRate] = useState(null); // id
+  const [zipRateError, setZipRateError] = useState(null);
+
   useEffect(() => {
     const fetchCharges = async () => {
       setChargesLoading(true);
@@ -30,8 +42,87 @@ function AdminDashboard() {
         setChargesLoading(false);
       }
     };
+
+    const fetchZipRates = async () => {
+      setZipRatesLoading(true);
+      try {
+        const response = await getZipRates();
+        setZipRates(response.data.zip_rates);
+      } catch (err) {
+        // non-fatal
+      } finally {
+        setZipRatesLoading(false);
+      }
+    };
+
     fetchCharges();
+    fetchZipRates();
   }, []);
+
+  const openRateEditor = (customer) => {
+    setEditingRateFor(customer.customer_id);
+    setRateEditValues({
+      custom_rate_per_ccf: customer.custom_rate_per_ccf ?? '',
+      zip_code: customer.zip_code ?? '',
+    });
+  };
+
+  const handleSaveCustomerRate = async (customerId) => {
+    setRateSaving(true);
+    try {
+      const payload = {
+        custom_rate_per_ccf: rateEditValues.custom_rate_per_ccf !== '' ? parseFloat(rateEditValues.custom_rate_per_ccf) : null,
+        zip_code: rateEditValues.zip_code,
+      };
+      await setCustomerRate(customerId, payload);
+      const response = await getAdminCharges();
+      setCharges(response.data.customers);
+      setEditingRateFor(null);
+    } catch (err) {
+      setChargesError(err.response?.data?.error || 'Failed to save rate');
+    } finally {
+      setRateSaving(false);
+    }
+  };
+
+  const handleZipRateSubmit = async () => {
+    setZipRateError(null);
+    try {
+      if (editingZipRate) {
+        await updateZipRate(editingZipRate, {
+          rate_per_ccf: parseFloat(zipRateForm.rate_per_ccf),
+          description: zipRateForm.description,
+        });
+      } else {
+        await createZipRate({
+          zip_code: zipRateForm.zip_code,
+          rate_per_ccf: parseFloat(zipRateForm.rate_per_ccf),
+          description: zipRateForm.description,
+        });
+      }
+      const response = await getZipRates();
+      setZipRates(response.data.zip_rates);
+      setZipRateForm({ zip_code: '', rate_per_ccf: '', description: '' });
+      setEditingZipRate(null);
+    } catch (err) {
+      setZipRateError(err.response?.data?.error || 'Failed to save zip code rate');
+    }
+  };
+
+  const handleEditZipRate = (rate) => {
+    setEditingZipRate(rate.id);
+    setZipRateForm({ zip_code: rate.zip_code, rate_per_ccf: String(rate.rate_per_ccf), description: rate.description || '' });
+  };
+
+  const handleDeleteZipRate = async (id) => {
+    setZipRateError(null);
+    try {
+      await deleteZipRate(id);
+      setZipRates((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      setZipRateError(err.response?.data?.error || 'Failed to delete');
+    }
+  };
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -260,7 +351,7 @@ function AdminDashboard() {
               <li>Creates monthly bills for each customer</li>
               <li>Calculates usage from 2018-2026</li>
               <li>Sets status (paid/sent/overdue/pending)</li>
-              <li>Rate: $2.50/CCF for Residential</li>
+              <li>Rate: $5.72/CCF for Residential</li>
             </ul>
           </div>
         </div>
@@ -297,8 +388,10 @@ function AdminDashboard() {
                     <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Customer</th>
                     <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Email</th>
                     <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Type</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Zip</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Rate ($/CCF)</th>
                     <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Bills</th>
-                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Total Charges</th>
+                    <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Total Cost</th>
                     <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Status Summary</th>
                     <th className="px-4 py-2"></th>
                   </tr>
@@ -317,18 +410,27 @@ function AdminDashboard() {
                       <>
                         <tr
                           key={customer.customer_id}
-                          className="border-b hover:bg-gray-50 cursor-pointer"
-                          onClick={() =>
-                            setExpandedCustomer(
-                              expandedCustomer === customer.customer_id ? null : customer.customer_id
-                            )
-                          }
+                          className="border-b hover:bg-gray-50"
                         >
                           <td className="px-4 py-3 font-medium">{customer.customer_name || '—'}</td>
                           <td className="px-4 py-3 text-gray-600">{customer.email || '—'}</td>
                           <td className="px-4 py-3 text-gray-600">{customer.customer_type || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{customer.zip_code || '—'}</td>
+                          <td className="px-4 py-3">
+                            {customer.custom_rate_per_ccf != null ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                ${customer.custom_rate_per_ccf.toFixed(2)} custom
+                              </span>
+                            ) : customer.zip_code && zipRates.find(z => z.zip_code === customer.zip_code && z.is_active) ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                ${zipRates.find(z => z.zip_code === customer.zip_code).rate_per_ccf.toFixed(2)} zip
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">default</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-right">{customer.bill_count}</td>
-                          <td className="px-4 py-3 text-right font-semibold">
+                          <td className="px-4 py-3 text-right font-semibold text-hydro-deep-aqua">
                             ${customer.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-4 py-3">
@@ -351,51 +453,120 @@ function AdminDashboard() {
                               ))}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-400 text-right">
-                            {expandedCustomer === customer.customer_id ? '▲' : '▼'}
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => openRateEditor(customer)}
+                              className="text-xs px-2 py-1 rounded border border-hydro-deep-aqua text-hydro-deep-aqua hover:bg-hydro-sky-blue mr-1"
+                            >
+                              Set Rate
+                            </button>
+                            <button
+                              onClick={() =>
+                                setExpandedCustomer(
+                                  expandedCustomer === customer.customer_id ? null : customer.customer_id
+                                )
+                              }
+                              className="text-gray-400 text-xs"
+                            >
+                              {expandedCustomer === customer.customer_id ? '▲' : '▼'}
+                            </button>
                           </td>
                         </tr>
+
+                        {/* Inline rate editor */}
+                        {editingRateFor === customer.customer_id && (
+                          <tr key={`${customer.customer_id}-rate-edit`}>
+                            <td colSpan={9} className="px-6 py-3 bg-purple-50 border-b">
+                              <div className="flex flex-wrap items-end gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Zip Code</label>
+                                  <input
+                                    type="text"
+                                    value={rateEditValues.zip_code}
+                                    onChange={(e) => setRateEditValues(v => ({ ...v, zip_code: e.target.value }))}
+                                    placeholder="e.g. 90210"
+                                    className="input-field text-sm w-28"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Custom Rate ($/CCF) — leave blank to clear</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={rateEditValues.custom_rate_per_ccf}
+                                    onChange={(e) => setRateEditValues(v => ({ ...v, custom_rate_per_ccf: e.target.value }))}
+                                    placeholder="e.g. 6.50"
+                                    className="input-field text-sm w-32"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => handleSaveCustomerRate(customer.customer_id)}
+                                  disabled={rateSaving}
+                                  className="btn-primary text-sm px-3 py-1.5"
+                                >
+                                  {rateSaving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => setEditingRateFor(null)}
+                                  className="text-sm px-3 py-1.5 border rounded text-gray-600 hover:bg-gray-100"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Expanded bills */}
                         {expandedCustomer === customer.customer_id && (
                           <tr key={`${customer.customer_id}-bills`}>
-                            <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                            <td colSpan={9} className="px-6 py-4 bg-gray-50">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="text-left text-gray-500 border-b">
                                     <th className="pb-1 pr-4">Period</th>
                                     <th className="pb-1 pr-4">Usage (CCF)</th>
-                                    <th className="pb-1 pr-4">Amount</th>
+                                    <th className="pb-1 pr-4">Rate ($/CCF)</th>
+                                    <th className="pb-1 pr-4">Cost</th>
                                     <th className="pb-1 pr-4">Due Date</th>
                                     <th className="pb-1">Status</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {customer.bills.map((bill) => (
-                                    <tr key={bill.id} className="border-b border-gray-100">
-                                      <td className="py-1.5 pr-4">
-                                        {bill.billing_period_start} – {bill.billing_period_end}
-                                      </td>
-                                      <td className="py-1.5 pr-4">{parseFloat(bill.total_usage_ccf).toFixed(2)}</td>
-                                      <td className="py-1.5 pr-4 font-medium">
-                                        ${parseFloat(bill.total_amount).toFixed(2)}
-                                      </td>
-                                      <td className="py-1.5 pr-4 text-gray-600">{bill.due_date}</td>
-                                      <td className="py-1.5">
-                                        <span
-                                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                            bill.status === 'paid'
-                                              ? 'bg-green-100 text-green-700'
-                                              : bill.status === 'overdue'
-                                              ? 'bg-red-100 text-red-700'
-                                              : bill.status === 'sent'
-                                              ? 'bg-blue-100 text-blue-700'
-                                              : 'bg-yellow-100 text-yellow-700'
-                                          }`}
-                                        >
-                                          {bill.status}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {customer.bills.map((bill) => {
+                                    const usage = parseFloat(bill.total_usage_ccf);
+                                    const cost = parseFloat(bill.total_amount);
+                                    const rate = usage > 0 ? (cost / usage).toFixed(2) : '—';
+                                    return (
+                                      <tr key={bill.id} className="border-b border-gray-100">
+                                        <td className="py-1.5 pr-4">
+                                          {bill.billing_period_start} – {bill.billing_period_end}
+                                        </td>
+                                        <td className="py-1.5 pr-4">{usage.toFixed(2)}</td>
+                                        <td className="py-1.5 pr-4 text-gray-500">${rate}</td>
+                                        <td className="py-1.5 pr-4 font-semibold text-hydro-deep-aqua">
+                                          ${cost.toFixed(2)}
+                                        </td>
+                                        <td className="py-1.5 pr-4 text-gray-600">{bill.due_date}</td>
+                                        <td className="py-1.5">
+                                          <span
+                                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                              bill.status === 'paid'
+                                                ? 'bg-green-100 text-green-700'
+                                                : bill.status === 'overdue'
+                                                ? 'bg-red-100 text-red-700'
+                                                : bill.status === 'sent'
+                                                ? 'bg-blue-100 text-blue-700'
+                                                : 'bg-yellow-100 text-yellow-700'
+                                            }`}
+                                          >
+                                            {bill.status}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </td>
@@ -410,6 +581,115 @@ function AdminDashboard() {
               )}
             </div>
           </>
+        )}
+      </div>
+
+      {/* Zip Code Rates */}
+      <div className="card mt-6">
+        <h2 className="text-xl font-semibold mb-1">Zip Code Rates</h2>
+        <p className="text-sm text-gray-500 mb-4">Area-based rate overrides applied when a customer has no individual rate set.</p>
+
+        {zipRateError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {zipRateError}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-end gap-3 mb-5 p-4 bg-gray-50 rounded">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Zip Code</label>
+            <input
+              type="text"
+              value={zipRateForm.zip_code}
+              onChange={(e) => setZipRateForm(f => ({ ...f, zip_code: e.target.value }))}
+              placeholder="e.g. 90210"
+              disabled={!!editingZipRate}
+              className="input-field text-sm w-28"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Rate ($/CCF)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={zipRateForm.rate_per_ccf}
+              onChange={(e) => setZipRateForm(f => ({ ...f, rate_per_ccf: e.target.value }))}
+              placeholder="e.g. 6.00"
+              className="input-field text-sm w-32"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Description (optional)</label>
+            <input
+              type="text"
+              value={zipRateForm.description}
+              onChange={(e) => setZipRateForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Downtown district"
+              className="input-field text-sm w-48"
+            />
+          </div>
+          <button
+            onClick={handleZipRateSubmit}
+            disabled={!zipRateForm.rate_per_ccf || (!editingZipRate && !zipRateForm.zip_code)}
+            className="btn-primary text-sm px-3 py-1.5"
+          >
+            {editingZipRate ? 'Update Rate' : 'Add Rate'}
+          </button>
+          {editingZipRate && (
+            <button
+              onClick={() => { setEditingZipRate(null); setZipRateForm({ zip_code: '', rate_per_ccf: '', description: '' }); }}
+              className="text-sm px-3 py-1.5 border rounded text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+
+        {zipRatesLoading ? (
+          <p className="text-sm text-gray-500">Loading zip rates...</p>
+        ) : zipRates.length === 0 ? (
+          <p className="text-sm text-gray-500">No zip code rates configured yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-hydro-sky-blue text-left">
+                <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Zip Code</th>
+                <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Rate ($/CCF)</th>
+                <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Description</th>
+                <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Active</th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {zipRates.map((rate) => (
+                <tr key={rate.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-2 font-medium">{rate.zip_code}</td>
+                  <td className="px-4 py-2 font-semibold text-hydro-deep-aqua">${rate.rate_per_ccf.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-gray-600">{rate.description || '—'}</td>
+                  <td className="px-4 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {rate.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => handleEditZipRate(rate)}
+                      className="text-xs px-2 py-1 rounded border border-hydro-deep-aqua text-hydro-deep-aqua hover:bg-hydro-sky-blue mr-1"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteZipRate(rate.id)}
+                      className="text-xs px-2 py-1 rounded border border-red-400 text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

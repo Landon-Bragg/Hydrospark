@@ -25,16 +25,31 @@ CREATE TABLE IF NOT EXISTS customers (
     user_id INT UNIQUE,
     customer_name VARCHAR(255) NOT NULL,
     mailing_address TEXT,
+    zip_code VARCHAR(10),
     location_id VARCHAR(50) UNIQUE,
     customer_type ENUM('Residential', 'Commercial', 'Industrial') DEFAULT 'Residential',
     cycle_number INT,
     business_name VARCHAR(255),
     facility_name VARCHAR(255),
+    custom_rate_per_ccf DECIMAL(10, 4) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_location_id (location_id),
-    INDEX idx_customer_type (customer_type)
+    INDEX idx_customer_type (customer_type),
+    INDEX idx_zip_code (zip_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Zip code based billing rates
+CREATE TABLE IF NOT EXISTS zip_code_rates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    zip_code VARCHAR(10) NOT NULL UNIQUE,
+    rate_per_ccf DECIMAL(10, 4) NOT NULL,
+    description VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_zip_code (zip_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Water usage data
@@ -167,6 +182,6 @@ VALUES ('admin@hydrospark.com', '$2b$12$K5iz3cTJHQFYQqP7VuGVMeZLmH7K7j8Z8f5VqB6L
 -- Insert default billing rates
 INSERT INTO billing_rates (customer_type, rate_type, flat_rate, effective_date, is_active)
 VALUES 
-    ('Residential', 'flat', 2.50, '2018-01-01', TRUE),
+    ('Residential', 'flat', 5.72, '2018-01-01', TRUE),
     ('Commercial', 'flat', 3.00, '2018-01-01', TRUE),
     ('Industrial', 'flat', 3.50, '2018-01-01', TRUE);

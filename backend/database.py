@@ -56,37 +56,41 @@ class User(db.Model):
 # Customer Model
 class Customer(db.Model):
     __tablename__ = 'customers'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True)
     customer_name = db.Column(db.String(255), nullable=False)
     mailing_address = db.Column(db.Text)
+    zip_code = db.Column(db.String(10))
     location_id = db.Column(db.String(50), unique=True)
     customer_type = db.Column(db.Enum('Residential', 'Commercial', 'Industrial'), default='Residential')
     cycle_number = db.Column(db.Integer)
     business_name = db.Column(db.String(255))
     facility_name = db.Column(db.String(255))
+    custom_rate_per_ccf = db.Column(db.Numeric(10, 4), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     water_usage = db.relationship('WaterUsage', backref='customer', cascade='all, delete-orphan')
     bills = db.relationship('Bill', backref='customer', cascade='all, delete-orphan')
     alerts = db.relationship('AnomalyAlert', backref='customer', cascade='all, delete-orphan')
     forecasts = db.relationship('UsageForecast', backref='customer', cascade='all, delete-orphan')
     meter_readings = db.relationship('MeterReading', backref='customer', cascade='all, delete-orphan')
-    
+
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
             'customer_name': self.customer_name,
             'mailing_address': self.mailing_address,
+            'zip_code': self.zip_code,
             'location_id': self.location_id,
             'customer_type': self.customer_type,
             'cycle_number': self.cycle_number,
             'business_name': self.business_name,
-            'facility_name': self.facility_name
+            'facility_name': self.facility_name,
+            'custom_rate_per_ccf': float(self.custom_rate_per_ccf) if self.custom_rate_per_ccf else None
         }
 
 # Water Usage Model
@@ -263,6 +267,29 @@ class BillingRate(db.Model):
             'effective_date': self.effective_date.isoformat() if self.effective_date else None,
             'is_active': self.is_active
         }
+
+# Zip Code Rate Model
+class ZipCodeRate(db.Model):
+    __tablename__ = 'zip_code_rates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    zip_code = db.Column(db.String(10), unique=True, nullable=False)
+    rate_per_ccf = db.Column(db.Numeric(10, 4), nullable=False)
+    description = db.Column(db.String(255))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'zip_code': self.zip_code,
+            'rate_per_ccf': float(self.rate_per_ccf),
+            'description': self.description,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 
 # Audit Log Model
 class AuditLog(db.Model):

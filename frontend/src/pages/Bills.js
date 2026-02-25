@@ -76,14 +76,20 @@ function Bills() {
     // Full bill history table with every row
     autoTable(doc, {
       startY: 99,
-      head: [['Billing Period', 'Usage (CCF)', 'Amount', 'Due Date', 'Status']],
-      body: bills.map(b => [
-        b.billing_period_start + ' to ' + b.billing_period_end,
-        parseFloat(b.total_usage_ccf).toFixed(2),
-        '$' + parseFloat(b.total_amount).toFixed(2),
-        b.due_date,
-        b.status.toUpperCase()
-      ]),
+      head: [['Billing Period', 'Usage (CCF)', 'Rate ($/CCF)', 'Cost', 'Due Date', 'Status']],
+      body: bills.map(b => {
+        const usage = parseFloat(b.total_usage_ccf);
+        const cost = parseFloat(b.total_amount);
+        const rate = usage > 0 ? '$' + (cost / usage).toFixed(2) : '—';
+        return [
+          b.billing_period_start + ' to ' + b.billing_period_end,
+          usage.toFixed(2),
+          rate,
+          '$' + cost.toFixed(2),
+          b.due_date,
+          b.status.toUpperCase()
+        ];
+      }),
       theme: 'grid',
       headStyles: { fillColor: [0, 75, 135] },
       styles: { fontSize: 10 }
@@ -153,29 +159,36 @@ function Bills() {
                   <tr>
                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Bill Period</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Usage (CCF)</th>
-                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Amount</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Rate ($/CCF)</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Cost</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Due Date</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {bills.map((bill) => (
-                    <tr key={bill.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-sm">
-                        {bill.billing_period_start} to {bill.billing_period_end}
-                      </td>
-                      <td className="px-4 py-2 text-sm">{parseFloat(bill.total_usage_ccf).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-sm font-semibold text-hydro-deep-aqua">
-                        ${parseFloat(bill.total_amount).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-2 text-sm">{bill.due_date}</td>
-                      <td className="px-4 py-2 text-sm">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusColor(bill.status)}`}>
-                          {bill.status.toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {bills.map((bill) => {
+                    const usage = parseFloat(bill.total_usage_ccf);
+                    const cost = parseFloat(bill.total_amount);
+                    const rate = usage > 0 ? (cost / usage).toFixed(2) : '—';
+                    return (
+                      <tr key={bill.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 text-sm">
+                          {bill.billing_period_start} to {bill.billing_period_end}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{usage.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">${rate}</td>
+                        <td className="px-4 py-2 text-sm font-semibold text-hydro-deep-aqua">
+                          ${cost.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{bill.due_date}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusColor(bill.status)}`}>
+                            {bill.status.toUpperCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

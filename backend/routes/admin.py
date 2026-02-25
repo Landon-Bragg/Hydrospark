@@ -4,7 +4,7 @@ Admin routes - User management, data import
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, AuditLog, Bill
+from database import db, User, Customer, AuditLog, Bill, ZipCodeRate
 from services.data_import_service import DataImportService
 from datetime import datetime
 import bcrypt
@@ -146,6 +146,131 @@ def get_charges_by_user():
 
         return jsonify({'customers': result}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/customers/<int:customer_id>/rate', methods=['PUT'])
+@jwt_required()
+def set_customer_rate(customer_id):
+    """Set or clear a per-customer CCF rate override"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+
+        data = request.get_json()
+        rate = data.get('custom_rate_per_ccf')
+        zip_code = data.get('zip_code')
+
+        if rate is not None:
+            customer.custom_rate_per_ccf = float(rate) if rate != '' else None
+        if zip_code is not None:
+            customer.zip_code = zip_code.strip() if zip_code else None
+
+        db.session.commit()
+        return jsonify({'message': 'Customer rate updated', 'customer': customer.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/zip-rates', methods=['GET'])
+@jwt_required()
+def get_zip_rates():
+    """Get all zip code rates"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        rates = ZipCodeRate.query.order_by(ZipCodeRate.zip_code).all()
+        return jsonify({'zip_rates': [r.to_dict() for r in rates]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/zip-rates', methods=['POST'])
+@jwt_required()
+def create_zip_rate():
+    """Create a zip code rate"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        data = request.get_json()
+        if ZipCodeRate.query.filter_by(zip_code=data['zip_code']).first():
+            return jsonify({'error': 'Rate for this zip code already exists'}), 400
+
+        rate = ZipCodeRate(
+            zip_code=data['zip_code'].strip(),
+            rate_per_ccf=float(data['rate_per_ccf']),
+            description=data.get('description', ''),
+            is_active=True
+        )
+        db.session.add(rate)
+        db.session.commit()
+        return jsonify({'message': 'Zip code rate created', 'zip_rate': rate.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/zip-rates/<int:rate_id>', methods=['PUT'])
+@jwt_required()
+def update_zip_rate(rate_id):
+    """Update a zip code rate"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        rate = ZipCodeRate.query.get(rate_id)
+        if not rate:
+            return jsonify({'error': 'Zip code rate not found'}), 404
+
+        data = request.get_json()
+        if 'rate_per_ccf' in data:
+            rate.rate_per_ccf = float(data['rate_per_ccf'])
+        if 'description' in data:
+            rate.description = data['description']
+        if 'is_active' in data:
+            rate.is_active = bool(data['is_active'])
+
+        db.session.commit()
+        return jsonify({'message': 'Zip code rate updated', 'zip_rate': rate.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/zip-rates/<int:rate_id>', methods=['DELETE'])
+@jwt_required()
+def delete_zip_rate(rate_id):
+    """Delete a zip code rate"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        rate = ZipCodeRate.query.get(rate_id)
+        if not rate:
+            return jsonify({'error': 'Zip code rate not found'}), 404
+
+        db.session.delete(rate)
+        db.session.commit()
+        return jsonify({'message': 'Zip code rate deleted'}), 200
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
