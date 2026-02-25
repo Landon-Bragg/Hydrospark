@@ -26,6 +26,7 @@ export const getCurrentUser = () => api.get('/auth/me');
 // Usage
 export const getUsage = (params) => api.get('/usage', { params });
 export const getUsageSummary = (params) => api.get('/usage/summary', { params });
+export const getTopCustomers = (params) => api.get('/usage/top-customers', { params });
 
 // Forecasts
 export const generateForecast = (data) => api.post('/forecasts/generate', data);
