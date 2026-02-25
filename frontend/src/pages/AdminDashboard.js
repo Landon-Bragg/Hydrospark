@@ -374,13 +374,20 @@ function AdminDashboard() {
           </div>
         ) : (
           <>
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={chargesSearch}
-              onChange={(e) => setChargesSearch(e.target.value)}
-              className="input-field mb-4 w-full max-w-sm"
-            />
+            <div className="flex items-center gap-3 mb-4">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={chargesSearch}
+                onChange={(e) => setChargesSearch(e.target.value)}
+                className="input-field w-full max-w-sm"
+              />
+              {!chargesSearch && (
+                <p className="text-sm text-gray-500 whitespace-nowrap">
+                  Showing top 3 by amount — search to see all
+                </p>
+              )}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -397,15 +404,15 @@ function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {charges
-                    .filter((c) => {
-                      const q = chargesSearch.toLowerCase();
-                      return (
-                        !q ||
-                        (c.customer_name || '').toLowerCase().includes(q) ||
-                        (c.email || '').toLowerCase().includes(q)
-                      );
-                    })
+                  {(() => {
+                    const q = chargesSearch.toLowerCase();
+                    const sorted = [...charges].sort((a, b) => b.total_amount - a.total_amount);
+                    if (!q) return sorted.slice(0, 3);
+                    return sorted.filter((c) =>
+                      (c.customer_name || '').toLowerCase().includes(q) ||
+                      (c.email || '').toLowerCase().includes(q)
+                    );
+                  })()
                     .map((customer) => (
                       <>
                         <tr
