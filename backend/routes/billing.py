@@ -29,7 +29,8 @@ def get_bills():
         if customer_id:
             query = query.filter_by(customer_id=customer_id)
         
-        bills = query.order_by(Bill.billing_period_end.desc()).all()
+        today = datetime.now().date()
+        bills = query.filter(Bill.billing_period_end <= today).order_by(Bill.billing_period_end.desc()).all()
         
         return jsonify({
             'bills': [b.to_dict() for b in bills]
