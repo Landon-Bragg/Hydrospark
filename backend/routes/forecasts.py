@@ -55,6 +55,39 @@ def generate_forecast():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@forecasts_bp.route('/generate-system', methods=['POST'])
+@jwt_required()
+def generate_system_forecast():
+    """Generate system-wide forecast aggregating all customers (admin/billing only)"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        data = request.get_json() or {}
+        months = data.get('months', 12)
+
+        result = ml_service.generate_system_forecast(months)
+
+        if isinstance(result, dict) and 'error' in result:
+            return jsonify(result), 400
+
+        return jsonify({
+            'forecasts': result,
+            'system_wide': True,
+            'months': months,
+            'message': f'Generated {len(result)} system-wide forecast data points'
+        }), 200
+
+    except Exception as e:
+        print(f"System forecast error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @forecasts_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_forecasts():

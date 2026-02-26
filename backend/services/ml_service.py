@@ -112,6 +112,75 @@ class MLService:
             traceback.print_exc()
             return {'error': str(e)}
     
+    def get_system_usage_data(self, days=730):
+        """Get aggregated daily usage across all customers"""
+        from sqlalchemy import func
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+
+        results = db.session.query(
+            WaterUsage.usage_date,
+            func.sum(WaterUsage.daily_usage_ccf).label('total_usage')
+        ).filter(
+            WaterUsage.usage_date >= start_date,
+            WaterUsage.usage_date <= end_date
+        ).group_by(WaterUsage.usage_date).order_by(WaterUsage.usage_date).all()
+
+        if not results:
+            return pd.DataFrame()
+
+        df = pd.DataFrame([{
+            'ds': r.usage_date,
+            'y': float(r.total_usage)
+        } for r in results])
+
+        return df
+
+    def generate_system_forecast(self, months=12):
+        """Generate system-wide forecast aggregated across all customers"""
+        try:
+            import math
+            df = self.get_system_usage_data(days=730)
+
+            if df.empty or len(df) < 30:
+                return {'error': 'Insufficient system-wide historical data (need at least 30 days)'}
+
+            print(f"System forecast: loaded {len(df)} days of aggregated usage data")
+
+            recent_30 = df.tail(30)['y'].mean()
+            recent_90 = df.tail(90)['y'].mean() if len(df) >= 90 else recent_30
+            recent_365 = df['y'].mean()
+
+            predicted_daily = (recent_30 * 0.5 + recent_90 * 0.3 + recent_365 * 0.2)
+
+            default_rate = float(os.getenv('DEFAULT_RATE_PER_CCF', 5.72))
+
+            forecasts = []
+            last_date = df['ds'].max()
+
+            for day in range(1, months * 30 + 1):
+                forecast_date = last_date + timedelta(days=day)
+                seasonal_factor = 1 + 0.1 * math.sin(2 * math.pi * day / 365)
+                predicted_usage = predicted_daily * seasonal_factor
+                confidence_range = predicted_usage * 0.2
+
+                forecasts.append({
+                    'forecast_date': forecast_date.isoformat() if hasattr(forecast_date, 'isoformat') else str(forecast_date),
+                    'predicted_usage_ccf': round(predicted_usage, 2),
+                    'predicted_amount': round(predicted_usage * default_rate, 2),
+                    'confidence_lower': round(max(0, predicted_usage - confidence_range), 2),
+                    'confidence_upper': round(predicted_usage + confidence_range, 2),
+                    'model_version': 'system_moving_average_v1'
+                })
+
+            print(f"System forecast: generated {len(forecasts)} data points")
+            return forecasts
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {'error': str(e)}
+
     def detect_anomalies(self, customer_id, lookback_days=90):
         """Detect anomalies using Isolation Forest"""
         try:

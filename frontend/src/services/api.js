@@ -30,6 +30,7 @@ export const getTopCustomers = (params) => api.get('/usage/top-customers', { par
 
 // Forecasts
 export const generateForecast = (data) => api.post('/forecasts/generate', data);
+export const generateSystemForecast = (data) => api.post('/forecasts/generate-system', data);
 export const getForecasts = (params) => api.get('/forecasts', { params });
 
 // Bills
