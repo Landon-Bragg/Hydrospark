@@ -66,7 +66,7 @@ function Dashboard() {
       <div>
         <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Admin Dashboard</h1>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
             <h3 className="text-lg font-semibold mb-2">Total Records</h3>
             <p className="text-3xl font-bold">
@@ -76,11 +76,19 @@ function Dashboard() {
           </div>
 
           <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
-            <h3 className="text-lg font-semibold mb-2">Total Customers</h3>
+            <h3 className="text-lg font-semibold mb-2">Total Accounts</h3>
             <p className="text-3xl font-bold">
               {adminStats?.customer_count != null ? adminStats.customer_count.toLocaleString() : '—'}
             </p>
-            <p className="text-sm mt-2">Active customer accounts</p>
+            <p className="text-sm mt-2">Unique location accounts</p>
+          </div>
+
+          <div className="card bg-gradient-to-br from-teal-500 to-teal-600 text-white">
+            <h3 className="text-lg font-semibold mb-2">Unique Customers</h3>
+            <p className="text-3xl font-bold">
+              {adminStats?.unique_customer_names != null ? adminStats.unique_customer_names.toLocaleString() : '—'}
+            </p>
+            <p className="text-sm mt-2">Distinct customer names</p>
           </div>
 
           <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
