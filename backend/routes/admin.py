@@ -434,12 +434,14 @@ def get_stats():
 
         record_count = db.session.query(func.count(WaterUsage.id)).scalar() or 0
         customer_count = db.session.query(func.count(Customer.id)).scalar() or 0
+        unique_name_count = db.session.query(func.count(func.distinct(Customer.customer_name))).scalar() or 0
         min_year = db.session.query(func.min(WaterUsage.year)).scalar()
         max_year = db.session.query(func.max(WaterUsage.year)).scalar()
 
         return jsonify({
             'record_count': record_count,
             'customer_count': customer_count,
+            'unique_customer_names': unique_name_count,
             'min_year': min_year,
             'max_year': max_year,
         }), 200
