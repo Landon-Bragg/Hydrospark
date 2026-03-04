@@ -10,20 +10,19 @@ from flask import current_app
 
 class DataImportService:
     def _normalize_customer_type(self, customer_type):
-        """Normalize customer type to allowed values"""
+        """Normalize customer type to allowed values: Residential, Municipal, Commercial"""
         customer_type = str(customer_type).strip()
-        
-        # Map various types to allowed values
+
         type_mapping = {
-            'Municipal': 'Commercial',
-            'Government': 'Commercial',
-            'Public': 'Commercial',
             'Residential': 'Residential',
+            'Municipal': 'Municipal',
             'Commercial': 'Commercial',
-            'Industrial': 'Industrial'
+            'Government': 'Municipal',
+            'Public': 'Municipal',
+            'Industrial': 'Commercial',
         }
-        
-        return type_mapping.get(customer_type, 'Commercial')
+
+        return type_mapping.get(customer_type, 'Residential')
     def import_usage_data(self, file):
         """Import water usage data from CSV or XLSX file"""
         try:
@@ -40,7 +39,7 @@ class DataImportService:
             required_columns = [
                 'Customer Name', 'Mailing Address', 'Location ID',
                 'Customer Type', 'Cycle Number', 'Year', 'Month', 'Day',
-                'Daily Water Usage (CCF)'
+                'Daily Water Usage (CCF)', 'Zip Code'
             ]
             
             missing_columns = [col for col in required_columns if col not in df.columns]
@@ -53,11 +52,18 @@ class DataImportService:
             imported_count = 0
             customers_created = 0
             errors = []
-            
+            failed_location_ids = set()
+
             for idx, row in df.iterrows():
                 try:
+                    location_id_str = str(row['Location ID'])
+
+                    # Skip rows for customers that previously failed
+                    if location_id_str in failed_location_ids:
+                        continue
+
                     # Get or create customer
-                    customer = Customer.query.filter_by(location_id=str(row['Location ID'])).first()
+                    customer = Customer.query.filter_by(location_id=location_id_str).first()
                     
                     if not customer:
                         # Create user and customer
@@ -79,11 +85,13 @@ class DataImportService:
                             db.session.add(user)
                             db.session.flush()
                         
+                        zip_code_val = str(row.get('Zip Code', '')).strip() if pd.notna(row.get('Zip Code')) else None
                         customer = Customer(
                             user_id=user.id,
                             customer_name=str(row['Customer Name']) if pd.notna(row['Customer Name']) else f"Customer {row['Location ID']}",
                             mailing_address=str(row['Mailing Address']) if pd.notna(row['Mailing Address']) else '',
-                            location_id=str(row['Location ID']),
+                            zip_code=zip_code_val,
+                            location_id=location_id_str,
                             customer_type=self._normalize_customer_type(str(row['Customer Type'])) if pd.notna(row['Customer Type']) else 'Residential',
                             cycle_number=int(row['Cycle Number']) if pd.notna(row['Cycle Number']) else None,
                             business_name=str(row.get('Business Name', '')) if pd.notna(row.get('Business Name')) else None,
@@ -126,9 +134,10 @@ class DataImportService:
                         print(f"Processed {idx + 1} records...")
                         
                 except Exception as e:
-                    errors.append(f"Row {idx + 1}: {str(e)}")
-                    if len(errors) > 100:  # Limit error collection
-                        break
+                    location_id_str = str(row.get('Location ID', f'row_{idx + 1}'))
+                    failed_location_ids.add(location_id_str)
+                    errors.append(f"Row {idx + 1} (location {location_id_str}): {str(e)}")
+                    db.session.rollback()
             
             # Final commit
             db.session.commit()

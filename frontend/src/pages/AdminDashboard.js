@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -29,6 +29,12 @@ function AdminDashboard() {
   const [editingZipRate, setEditingZipRate] = useState(null); // id
   const [zipRateError, setZipRateError] = useState(null);
 
+  // Zip analytics
+  const [zipAnalytics, setZipAnalytics] = useState([]);
+  const [zipAnalyticsLoading, setZipAnalyticsLoading] = useState(false);
+  const [zipAnalyticsSearch, setZipAnalyticsSearch] = useState('');
+  const [expandedZip, setExpandedZip] = useState(null);
+
   useEffect(() => {
     const fetchCharges = async () => {
       setChargesLoading(true);
@@ -55,8 +61,21 @@ function AdminDashboard() {
       }
     };
 
+    const fetchZipAnalytics = async () => {
+      setZipAnalyticsLoading(true);
+      try {
+        const response = await getZipAnalytics();
+        setZipAnalytics(response.data.zip_analytics);
+      } catch (err) {
+        // non-fatal
+      } finally {
+        setZipAnalyticsLoading(false);
+      }
+    };
+
     fetchCharges();
     fetchZipRates();
+    fetchZipAnalytics();
   }, []);
 
   const openRateEditor = (customer) => {
@@ -697,6 +716,133 @@ function AdminDashboard() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* Zip Code Analytics */}
+      <div className="card mt-6">
+        <h2 className="text-xl font-semibold mb-1">Zip Code Analytics</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Average monthly bill, usage, and total revenue grouped by zip code and account type.
+        </p>
+
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search by zip code..."
+            value={zipAnalyticsSearch}
+            onChange={(e) => setZipAnalyticsSearch(e.target.value)}
+            className="input-field w-full max-w-xs"
+          />
+        </div>
+
+        {zipAnalyticsLoading ? (
+          <div className="text-center py-6">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-hydro-spark-blue"></div>
+            <p className="text-sm text-gray-500 mt-2">Loading analytics...</p>
+          </div>
+        ) : zipAnalytics.length === 0 ? (
+          <p className="text-sm text-gray-500">No data yet — generate bills first.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-hydro-sky-blue text-left">
+                  <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Zip Code</th>
+                  <th className="px-4 py-2 font-semibold text-hydro-deep-aqua">Account Types</th>
+                  <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Customers</th>
+                  <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Avg Monthly Bill</th>
+                  <th className="px-4 py-2 font-semibold text-hydro-deep-aqua text-right">Total Revenue</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {zipAnalytics
+                  .filter((z) => !zipAnalyticsSearch || z.zip_code.includes(zipAnalyticsSearch))
+                  .map((z) => {
+                    const totalCustomers = z.types.reduce((s, t) => s + t.customer_count, 0);
+                    const totalRevenue = z.types.reduce((s, t) => s + t.total_revenue, 0);
+                    const avgBill = z.types.reduce((s, t) => s + t.avg_monthly_bill * t.customer_count, 0) / (totalCustomers || 1);
+                    return (
+                      <>
+                        <tr key={z.zip_code} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-3 font-semibold text-hydro-deep-aqua">{z.zip_code}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1 flex-wrap">
+                              {z.types.map((t) => (
+                                <span key={t.customer_type} className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  t.customer_type === 'Residential' ? 'bg-blue-100 text-blue-700'
+                                  : t.customer_type === 'Municipal' ? 'bg-green-100 text-green-700'
+                                  : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {t.customer_type}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">{totalCustomers}</td>
+                          <td className="px-4 py-3 text-right font-semibold">
+                            ${avgBill.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-hydro-deep-aqua">
+                            ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => setExpandedZip(expandedZip === z.zip_code ? null : z.zip_code)}
+                              className="text-gray-400 text-xs"
+                            >
+                              {expandedZip === z.zip_code ? '▲' : '▼'}
+                            </button>
+                          </td>
+                        </tr>
+
+                        {expandedZip === z.zip_code && (
+                          <tr key={`${z.zip_code}-detail`}>
+                            <td colSpan={6} className="px-6 py-4 bg-gray-50 border-b">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-left text-gray-500 border-b">
+                                    <th className="pb-1 pr-4">Account Type</th>
+                                    <th className="pb-1 pr-4 text-right">Customers</th>
+                                    <th className="pb-1 pr-4 text-right">Avg Monthly Usage (CCF)</th>
+                                    <th className="pb-1 pr-4 text-right">Avg Monthly Bill</th>
+                                    <th className="pb-1 text-right">Total Revenue</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {z.types.map((t) => (
+                                    <tr key={t.customer_type} className="border-b border-gray-100">
+                                      <td className="py-1.5 pr-4">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                          t.customer_type === 'Residential' ? 'bg-blue-100 text-blue-700'
+                                          : t.customer_type === 'Municipal' ? 'bg-green-100 text-green-700'
+                                          : 'bg-purple-100 text-purple-700'
+                                        }`}>
+                                          {t.customer_type}
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 pr-4 text-right">{t.customer_count}</td>
+                                      <td className="py-1.5 pr-4 text-right">{t.avg_monthly_usage_ccf.toFixed(2)}</td>
+                                      <td className="py-1.5 pr-4 text-right font-semibold">
+                                        ${t.avg_monthly_bill.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="py-1.5 text-right font-semibold text-hydro-deep-aqua">
+                                        ${t.total_revenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

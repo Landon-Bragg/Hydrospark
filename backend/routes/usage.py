@@ -4,7 +4,7 @@ Water usage data routes
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, WaterUsage
+from database import db, User, Customer, WaterUsage, Bill
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
@@ -175,6 +175,59 @@ def get_top_customers():
             })
 
         return jsonify({'top_customers': output}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@usage_bp.route('/zip-averages', methods=['GET'])
+@jwt_required()
+def get_zip_averages():
+    """
+    Return average monthly bill and usage per customer type for a given zip code.
+    Customers use this to compare their usage against others in their area.
+    Query param: zip_code (optional — defaults to the calling customer's zip code).
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        zip_code = request.args.get('zip_code')
+
+        # Customers default to their own zip code
+        if not zip_code and user.role == 'customer':
+            if not user.customer or not user.customer.zip_code:
+                return jsonify({'zip_code': None, 'averages': []}), 200
+            zip_code = user.customer.zip_code
+
+        if not zip_code:
+            return jsonify({'error': 'zip_code is required'}), 400
+
+        # Average monthly bill and usage per customer type in this zip code
+        rows = (
+            db.session.query(
+                Customer.customer_type,
+                func.avg(Bill.total_amount).label('avg_monthly_bill'),
+                func.avg(Bill.total_usage_ccf).label('avg_monthly_usage_ccf'),
+                func.count(func.distinct(Customer.id)).label('customer_count'),
+            )
+            .join(Bill, Bill.customer_id == Customer.id)
+            .filter(Customer.zip_code == zip_code)
+            .group_by(Customer.customer_type)
+            .all()
+        )
+
+        averages = [
+            {
+                'customer_type': r.customer_type,
+                'avg_monthly_bill': round(float(r.avg_monthly_bill), 2),
+                'avg_monthly_usage_ccf': round(float(r.avg_monthly_usage_ccf), 2),
+                'customer_count': int(r.customer_count),
+            }
+            for r in rows
+        ]
+
+        return jsonify({'zip_code': zip_code, 'averages': averages}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

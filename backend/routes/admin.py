@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, AuditLog, Bill, ZipCodeRate
 from services.data_import_service import DataImportService
 from datetime import datetime
+from sqlalchemy import func
 import bcrypt
 
 admin_bp = Blueprint('admin', __name__)
@@ -271,6 +272,55 @@ def delete_zip_rate(rate_id):
         return jsonify({'message': 'Zip code rate deleted'}), 200
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/zip-analytics', methods=['GET'])
+@jwt_required()
+def get_zip_analytics():
+    """
+    Return billing and usage stats grouped by zip code and customer type (admin only).
+    Used for the admin zip code analytics dashboard.
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        rows = (
+            db.session.query(
+                Customer.zip_code,
+                Customer.customer_type,
+                func.count(func.distinct(Customer.id)).label('customer_count'),
+                func.avg(Bill.total_amount).label('avg_monthly_bill'),
+                func.avg(Bill.total_usage_ccf).label('avg_monthly_usage_ccf'),
+                func.sum(Bill.total_amount).label('total_revenue'),
+            )
+            .join(Bill, Bill.customer_id == Customer.id)
+            .filter(Customer.zip_code.isnot(None))
+            .group_by(Customer.zip_code, Customer.customer_type)
+            .order_by(Customer.zip_code, Customer.customer_type)
+            .all()
+        )
+
+        # Group by zip code so the response is [{zip_code, types: [...]}, ...]
+        zip_map = {}
+        for r in rows:
+            zc = r.zip_code
+            if zc not in zip_map:
+                zip_map[zc] = {'zip_code': zc, 'types': []}
+            zip_map[zc]['types'].append({
+                'customer_type': r.customer_type,
+                'customer_count': int(r.customer_count),
+                'avg_monthly_bill': round(float(r.avg_monthly_bill), 2),
+                'avg_monthly_usage_ccf': round(float(r.avg_monthly_usage_ccf), 2),
+                'total_revenue': round(float(r.total_revenue), 2),
+            })
+
+        return jsonify({'zip_analytics': list(zip_map.values())}), 200
+
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
