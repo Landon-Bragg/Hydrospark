@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsageSummary, getAlerts, getForecasts, getZipAverages } from '../services/api';
+import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats } from '../services/api';
 
 const TYPE_COLORS = {
   Residential: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -14,6 +14,7 @@ function Dashboard() {
   const [alerts, setAlerts] = useState([]);
   const [forecasts, setForecasts] = useState([]);
   const [zipAverages, setZipAverages] = useState(null); // { zip_code, averages: [] }
+  const [adminStats, setAdminStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -41,11 +42,13 @@ function Dashboard() {
           setZipAverages(zipRes.data);
         }
       }
-      // For admin/billing, show welcome message
+      // For admin/billing, load system stats
       else {
         setSummary(null);
         setAlerts([]);
         setForecasts([]);
+        const statsRes = await getAdminStats().catch(() => ({ data: {} }));
+        setAdminStats(statsRes.data);
       }
     } catch (err) {
       console.error('Failed to load dashboard data', err);
@@ -66,20 +69,32 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
             <h3 className="text-lg font-semibold mb-2">Total Records</h3>
-            <p className="text-3xl font-bold">1,035,131</p>
+            <p className="text-3xl font-bold">
+              {adminStats?.record_count != null ? adminStats.record_count.toLocaleString() : '—'}
+            </p>
             <p className="text-sm mt-2">Water usage records imported</p>
           </div>
-          
+
           <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
             <h3 className="text-lg font-semibold mb-2">Total Customers</h3>
-            <p className="text-3xl font-bold">657</p>
+            <p className="text-3xl font-bold">
+              {adminStats?.customer_count != null ? adminStats.customer_count.toLocaleString() : '—'}
+            </p>
             <p className="text-sm mt-2">Active customer accounts</p>
           </div>
-          
+
           <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
             <h3 className="text-lg font-semibold mb-2">Date Range</h3>
-            <p className="text-xl font-bold">2018 - 2026</p>
-            <p className="text-sm mt-2">8 years of data</p>
+            <p className="text-xl font-bold">
+              {adminStats?.min_year && adminStats?.max_year
+                ? `${adminStats.min_year} – ${adminStats.max_year}`
+                : '—'}
+            </p>
+            <p className="text-sm mt-2">
+              {adminStats?.min_year && adminStats?.max_year
+                ? `${adminStats.max_year - adminStats.min_year + 1} years of data`
+                : 'Years of data'}
+            </p>
           </div>
         </div>
 

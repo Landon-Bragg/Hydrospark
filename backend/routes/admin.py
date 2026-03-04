@@ -4,7 +4,7 @@ Admin routes - User management, data import
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, AuditLog, Bill, ZipCodeRate
+from database import db, User, Customer, AuditLog, Bill, ZipCodeRate, WaterUsage
 from services.data_import_service import DataImportService
 from datetime import datetime
 from sqlalchemy import func
@@ -419,4 +419,29 @@ def generate_historical_bills():
         print(f"Historical bill generation error: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_stats():
+    """Return high-level system stats for the admin dashboard."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        record_count = db.session.query(func.count(WaterUsage.id)).scalar() or 0
+        customer_count = db.session.query(func.count(Customer.id)).scalar() or 0
+        min_year = db.session.query(func.min(WaterUsage.year)).scalar()
+        max_year = db.session.query(func.max(WaterUsage.year)).scalar()
+
+        return jsonify({
+            'record_count': record_count,
+            'customer_count': customer_count,
+            'min_year': min_year,
+            'max_year': max_year,
+        }), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500

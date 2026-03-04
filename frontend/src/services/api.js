@@ -51,6 +51,7 @@ export const createZipRate = (data) => api.post('/admin/zip-rates', data);
 export const updateZipRate = (id, data) => api.put(`/admin/zip-rates/${id}`, data);
 export const deleteZipRate = (id) => api.delete(`/admin/zip-rates/${id}`);
 export const getZipAnalytics = () => api.get('/admin/zip-analytics');
+export const getAdminStats = () => api.get('/admin/stats');
 export const approveUser = (id) => api.post(`/admin/users/${id}/approve`);
 export const createUser = (data) => api.post('/admin/users', data);
 export const importData = (formData) => api.post('/admin/import/usage', formData, {
