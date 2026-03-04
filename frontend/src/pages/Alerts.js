@@ -8,7 +8,7 @@ function Alerts() {
 
   useEffect(() => {
     loadAlerts();
-  }, [filter]);
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAlerts = async () => {
     try {

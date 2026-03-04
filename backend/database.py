@@ -63,7 +63,7 @@ class Customer(db.Model):
     mailing_address = db.Column(db.Text)
     zip_code = db.Column(db.String(10))
     location_id = db.Column(db.String(50), unique=True)
-    customer_type = db.Column(db.Enum('Residential', 'Commercial', 'Industrial'), default='Residential')
+    customer_type = db.Column(db.Enum('Residential', 'Municipal', 'Commercial'), default='Residential')
     cycle_number = db.Column(db.Integer)
     business_name = db.Column(db.String(255))
     facility_name = db.Column(db.String(255))
@@ -244,7 +244,7 @@ class BillingRate(db.Model):
     __tablename__ = 'billing_rates'
     
     id = db.Column(db.Integer, primary_key=True)
-    customer_type = db.Column(db.Enum('Residential', 'Commercial', 'Industrial'), nullable=False)
+    customer_type = db.Column(db.Enum('Residential', 'Municipal', 'Commercial'), nullable=False)
     rate_type = db.Column(db.Enum('flat', 'tiered'), default='flat')
     flat_rate = db.Column(db.Numeric(10, 4))
     tier_min = db.Column(db.Numeric(10, 2))

@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsageSummary, getAlerts, getForecasts } from '../services/api';
+import { getUsageSummary, getAlerts, getForecasts, getZipAverages } from '../services/api';
+
+const TYPE_COLORS = {
+  Residential: 'bg-blue-50 border-blue-200 text-blue-800',
+  Municipal: 'bg-green-50 border-green-200 text-green-800',
+  Commercial: 'bg-purple-50 border-purple-200 text-purple-800',
+};
 
 function Dashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [forecasts, setForecasts] = useState([]);
+  const [zipAverages, setZipAverages] = useState(null); // { zip_code, averages: [] }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
     try {
@@ -21,14 +28,18 @@ function Dashboard() {
 
       // For customers, load their data
       if (user?.role === 'customer') {
-        const [summaryRes, alertsRes, forecastsRes] = await Promise.all([
-          getUsageSummary().catch(e => ({ data: { summary: null } })),
-          getAlerts({ status: 'new' }).catch(e => ({ data: { alerts: [] } })),
-          getForecasts().catch(e => ({ data: { forecasts: [] } }))
+        const [summaryRes, alertsRes, forecastsRes, zipRes] = await Promise.all([
+          getUsageSummary().catch(() => ({ data: { summary: null } })),
+          getAlerts({ status: 'new' }).catch(() => ({ data: { alerts: [] } })),
+          getForecasts().catch(() => ({ data: { forecasts: [] } })),
+          getZipAverages().catch(() => ({ data: { zip_code: null, averages: [] } })),
         ]);
         setSummary(summaryRes.data.summary);
         setAlerts(alertsRes.data.alerts || []);
         setForecasts(forecastsRes.data.forecasts?.slice(0, 5) || []);
+        if (zipRes.data.zip_code) {
+          setZipAverages(zipRes.data);
+        }
       }
       // For admin/billing, show welcome message
       else {
@@ -137,6 +148,39 @@ function Dashboard() {
           <p className="text-3xl font-bold">{alerts.length}</p>
         </div>
       </div>
+
+      {zipAverages && zipAverages.averages.length > 0 && (
+        <div className="card mb-6">
+          <h2 className="text-xl font-bold text-hydro-deep-aqua mb-1">
+            Neighborhood Comparison
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Average monthly water bill for customers in ZIP code <strong>{zipAverages.zip_code}</strong>, by account type.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {['Residential', 'Municipal', 'Commercial'].map((type) => {
+              const stat = zipAverages.averages.find((a) => a.customer_type === type);
+              if (!stat) return null;
+              return (
+                <div
+                  key={type}
+                  className={`rounded-lg border p-4 ${TYPE_COLORS[type] || 'bg-gray-50 border-gray-200 text-gray-800'}`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-2">{type}</p>
+                  <p className="text-2xl font-bold">
+                    ${stat.avg_monthly_bill.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-sm mt-1">avg monthly bill</p>
+                  <p className="text-sm mt-1">
+                    {stat.avg_monthly_usage_ccf.toFixed(2)} CCF avg usage
+                  </p>
+                  <p className="text-xs mt-2 opacity-70">{stat.customer_count} customer{stat.customer_count !== 1 ? 's' : ''}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">

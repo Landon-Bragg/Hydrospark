@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS customers (
     mailing_address TEXT,
     zip_code VARCHAR(10),
     location_id VARCHAR(50) UNIQUE,
-    customer_type ENUM('Residential', 'Commercial', 'Industrial') DEFAULT 'Residential',
+    customer_type ENUM('Residential', 'Municipal', 'Commercial') DEFAULT 'Residential',
     cycle_number INT,
     business_name VARCHAR(255),
     facility_name VARCHAR(255),
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS water_usage (
 -- Billing rates configuration
 CREATE TABLE IF NOT EXISTS billing_rates (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_type ENUM('Residential', 'Commercial', 'Industrial') NOT NULL,
+    customer_type ENUM('Residential', 'Municipal', 'Commercial') NOT NULL,
     rate_type ENUM('flat', 'tiered') DEFAULT 'flat',
     flat_rate DECIMAL(10, 4),
     tier_min DECIMAL(10, 2),
@@ -181,7 +181,7 @@ VALUES ('admin@hydrospark.com', '$2b$12$K5iz3cTJHQFYQqP7VuGVMeZLmH7K7j8Z8f5VqB6L
 
 -- Insert default billing rates
 INSERT INTO billing_rates (customer_type, rate_type, flat_rate, effective_date, is_active)
-VALUES 
+VALUES
     ('Residential', 'flat', 5.72, '2018-01-01', TRUE),
-    ('Commercial', 'flat', 3.00, '2018-01-01', TRUE),
-    ('Industrial', 'flat', 3.50, '2018-01-01', TRUE);
+    ('Municipal', 'flat', 3.00, '2018-01-01', TRUE),
+    ('Commercial', 'flat', 3.00, '2018-01-01', TRUE);
