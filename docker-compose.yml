@@ -12,8 +12,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/init.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./backend/docker-init.sh:/docker-entrypoint-initdb.d/02_seed.sh
-      - ./backend/seed_data:/opt/seed:ro
+      - ./backend/seed_data/hydrospark_data.sql.gz:/docker-entrypoint-initdb.d/02_data.sql.gz:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
       interval: 10s
