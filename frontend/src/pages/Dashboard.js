@@ -223,10 +223,16 @@ function Dashboard() {
         };
         const next5 = weather.days.slice(1, 6);
         return (
-          <div className="card mb-6">
+          <div className="card mb-6 border-2 border-hydro-sky-blue">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xl">🌤️</span>
+              <h2 className="text-lg font-bold text-hydro-deep-aqua">Live Weather Outlook</h2>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">Open-Meteo</span>
+              <span className="text-xs text-gray-400 ml-auto">📍 {weather.location} ({weather.zip_code})</span>
+            </div>
             <div className="flex flex-wrap gap-4 items-start">
               <div className={`rounded-xl bg-gradient-to-br ${colorMap[today.water_impact_color] || 'from-gray-500 to-gray-600'} text-white p-4 min-w-40`}>
-                <p className="text-xs font-semibold opacity-80 mb-1">Today · {weather.location}</p>
+                <p className="text-xs font-semibold opacity-80 mb-1">Today</p>
                 <p className="text-4xl font-bold">{today.max_temp_f !== null ? `${today.max_temp_f}°` : '—'}</p>
                 <p className="text-sm opacity-90">Low {today.min_temp_f !== null ? `${today.min_temp_f}°F` : '—'}</p>
                 <p className="text-sm opacity-90 mt-0.5">Rain: {today.precipitation_mm > 0 ? `${today.precipitation_mm}mm` : 'None'}</p>
@@ -235,7 +241,7 @@ function Dashboard() {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-hydro-deep-aqua mb-1">Water Usage Outlook</h3>
+                <p className="text-sm font-semibold text-gray-700 mb-1">Water Usage Impact Today</p>
                 <p className="text-sm text-gray-600 mb-3">{today.water_impact_desc}</p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {next5.map((day) => {
@@ -253,7 +259,9 @@ function Dashboard() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Full 14-day outlook on the Forecasts page.</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Full 14-day outlook on the <a href="/forecasts" className="underline text-hydro-spark-blue">Forecasts page</a>.
+                </p>
               </div>
             </div>
           </div>

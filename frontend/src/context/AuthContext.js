@@ -15,7 +15,11 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token');
     if (token) {
       getCurrentUser()
-        .then(res => setUser(res.data.user))
+        .then(res => {
+          const userData = res.data.user;
+          if (res.data.customer) userData.customer = res.data.customer;
+          setUser(userData);
+        })
         .catch(() => {
           localStorage.removeItem('token');
           setUser(null);
@@ -29,7 +33,9 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const response = await apiLogin(email, password);
     localStorage.setItem('token', response.data.access_token);
-    setUser(response.data.user);
+    const userData = response.data.user;
+    if (response.data.customer) userData.customer = response.data.customer;
+    setUser(userData);
     return response.data;
   };
 

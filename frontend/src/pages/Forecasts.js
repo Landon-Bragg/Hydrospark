@@ -38,8 +38,6 @@ function Forecasts() {
   // Weather
   const [weather, setWeather] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherZip, setWeatherZip] = useState('');
-  const [weatherZipInput, setWeatherZipInput] = useState('');
 
   useEffect(() => {
     if (isAdmin) {
@@ -47,10 +45,8 @@ function Forecasts() {
     } else {
       loadCustomerForecasts();
     }
-    // Load weather for customer's zip if available
     const customerZip = user?.customer?.zip_code;
     if (customerZip) {
-      setWeatherZip(customerZip);
       loadWeather(customerZip);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -231,54 +227,44 @@ function Forecasts() {
       )}
 
       {/* Weather Panel */}
-      <div className="card mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="card mb-6 border-2 border-hydro-sky-blue">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-xl font-bold text-hydro-deep-aqua">Weather & Water Usage Outlook</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              14-day forecast showing how weather conditions will impact water demand
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-2xl">🌤️</span>
+              <h2 className="text-xl font-bold text-hydro-deep-aqua">14-Day Weather & Water Usage Outlook</h2>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">Live · Open-Meteo</span>
+            </div>
+            <p className="text-sm text-gray-500">
+              Real-time weather forecast for your service address — showing predicted impact on water demand each day.
             </p>
           </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Enter zip code"
-              value={weatherZipInput}
-              onChange={(e) => setWeatherZipInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { setWeatherZip(weatherZipInput); loadWeather(weatherZipInput); }}}
-              className="input-field w-36 text-sm"
-            />
-            <button
-              className="btn-primary text-sm px-4"
-              onClick={() => { setWeatherZip(weatherZipInput); loadWeather(weatherZipInput); }}
-              disabled={!weatherZipInput || weatherLoading}
-            >
-              {weatherLoading ? '...' : 'Load'}
-            </button>
-          </div>
+          {weather && (
+            <p className="text-sm text-gray-500 mt-1">
+              📍 <strong>{weather.location}</strong> ({weather.zip_code})
+            </p>
+          )}
         </div>
 
         {weatherLoading && (
-          <div className="text-center py-6">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-hydro-spark-blue"></div>
-            <p className="text-sm text-gray-500 mt-2">Fetching weather data...</p>
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-hydro-spark-blue mb-3"></div>
+            <p className="text-sm text-gray-500">Fetching live weather data for your area...</p>
           </div>
         )}
 
         {!weatherLoading && !weather && (
-          <p className="text-sm text-gray-500 py-4 text-center">
-            Enter a zip code above to see the 14-day weather outlook and its predicted impact on water usage.
-          </p>
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-3xl mb-2">🌡️</p>
+            <p className="text-sm">No service address zip code on file. Contact your administrator to update your account.</p>
+          </div>
         )}
 
         {!weatherLoading && weather && (
           <>
-            <p className="text-sm text-gray-500 mb-3">
-              Showing forecast for <strong>{weather.location}</strong> ({weather.zip_code})
-            </p>
             <div className="overflow-x-auto">
               <div className="flex gap-2 pb-2" style={{ minWidth: 'max-content' }}>
-                {weather.days.map((day) => {
+                {weather.days.map((day, idx) => {
                   const colorMap = {
                     red: 'bg-red-50 border-red-300',
                     orange: 'bg-orange-50 border-orange-300',
@@ -301,12 +287,14 @@ function Forecasts() {
                     green: 'bg-green-100 text-green-700',
                   };
                   const dateObj = new Date(day.date + 'T12:00:00');
-                  const label = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  const label = idx === 0
+                    ? 'Today'
+                    : dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                   return (
                     <div
                       key={day.date}
                       title={day.water_impact_desc}
-                      className={`rounded-lg border p-3 w-32 flex-shrink-0 ${colorMap[day.water_impact_color] || 'bg-gray-50 border-gray-200'}`}
+                      className={`rounded-lg border p-3 w-32 flex-shrink-0 ${colorMap[day.water_impact_color] || 'bg-gray-50 border-gray-200'} ${idx === 0 ? 'ring-2 ring-hydro-spark-blue' : ''}`}
                     >
                       <p className="text-xs font-semibold text-gray-600 mb-1">{label}</p>
                       <p className={`text-sm font-bold ${textMap[day.water_impact_color]}`}>
@@ -318,6 +306,9 @@ function Forecasts() {
                       <p className="text-xs text-gray-500 mt-0.5">
                         Rain: {day.precipitation_mm > 0 ? `${day.precipitation_mm}mm` : 'None'}
                       </p>
+                      {day.uv_index !== null && (
+                        <p className="text-xs text-gray-400 mt-0.5">UV: {day.uv_index}</p>
+                      )}
                       <div className={`mt-2 text-xs font-semibold px-1.5 py-0.5 rounded text-center ${badgeMap[day.water_impact_color]}`}>
                         {day.water_impact}
                       </div>
@@ -326,11 +317,18 @@ function Forecasts() {
                 })}
               </div>
             </div>
-            <div className="mt-3 p-3 bg-gray-50 rounded text-xs text-gray-600">
-              <strong>Impact levels explained:</strong> Usage impact is estimated based on temperature and rainfall.
-              Hot, dry days drive higher outdoor irrigation and cooling demand.
-              Rainy or cool days typically reduce water consumption below baseline.
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 bg-gray-50 rounded text-xs text-gray-600">
+                <strong>Impact levels:</strong> Hot, dry days (95°F+) drive the highest outdoor irrigation and cooling demand.
+                Rainy or cool days typically reduce usage below baseline.
+              </div>
+              <div className="p-3 bg-blue-50 rounded text-xs text-blue-700">
+                <strong>Today's outlook:</strong> {weather.days[0]?.water_impact_desc}
+              </div>
             </div>
+            <p className="text-xs text-gray-400 mt-3 text-right">
+              Weather data provided by <a href="https://open-meteo.com" target="_blank" rel="noreferrer" className="underline">Open-Meteo</a> · updates daily
+            </p>
           </>
         )}
       </div>
