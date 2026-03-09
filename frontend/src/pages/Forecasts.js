@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { generateForecast, generateSystemForecast, getForecasts } from '../services/api';
+import { generateForecast, generateSystemForecast, getForecasts, getWeatherForecast } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Line } from 'react-chartjs-2';
 import {
@@ -35,14 +35,38 @@ function Forecasts() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  // Weather
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherZip, setWeatherZip] = useState('');
+  const [weatherZipInput, setWeatherZipInput] = useState('');
+
   useEffect(() => {
     if (isAdmin) {
-      // Admins generate on demand — system forecasts are not stored in the DB
       setLoading(false);
     } else {
       loadCustomerForecasts();
     }
+    // Load weather for customer's zip if available
+    const customerZip = user?.customer?.zip_code;
+    if (customerZip) {
+      setWeatherZip(customerZip);
+      loadWeather(customerZip);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadWeather = async (zip) => {
+    if (!zip) return;
+    setWeatherLoading(true);
+    try {
+      const res = await getWeatherForecast(zip);
+      setWeather(res.data);
+    } catch {
+      // non-fatal
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
 
   const loadCustomerForecasts = async () => {
     try {
@@ -205,6 +229,111 @@ function Forecasts() {
           </p>
         </div>
       )}
+
+      {/* Weather Panel */}
+      <div className="card mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-hydro-deep-aqua">Weather & Water Usage Outlook</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              14-day forecast showing how weather conditions will impact water demand
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Enter zip code"
+              value={weatherZipInput}
+              onChange={(e) => setWeatherZipInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { setWeatherZip(weatherZipInput); loadWeather(weatherZipInput); }}}
+              className="input-field w-36 text-sm"
+            />
+            <button
+              className="btn-primary text-sm px-4"
+              onClick={() => { setWeatherZip(weatherZipInput); loadWeather(weatherZipInput); }}
+              disabled={!weatherZipInput || weatherLoading}
+            >
+              {weatherLoading ? '...' : 'Load'}
+            </button>
+          </div>
+        </div>
+
+        {weatherLoading && (
+          <div className="text-center py-6">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-hydro-spark-blue"></div>
+            <p className="text-sm text-gray-500 mt-2">Fetching weather data...</p>
+          </div>
+        )}
+
+        {!weatherLoading && !weather && (
+          <p className="text-sm text-gray-500 py-4 text-center">
+            Enter a zip code above to see the 14-day weather outlook and its predicted impact on water usage.
+          </p>
+        )}
+
+        {!weatherLoading && weather && (
+          <>
+            <p className="text-sm text-gray-500 mb-3">
+              Showing forecast for <strong>{weather.location}</strong> ({weather.zip_code})
+            </p>
+            <div className="overflow-x-auto">
+              <div className="flex gap-2 pb-2" style={{ minWidth: 'max-content' }}>
+                {weather.days.map((day) => {
+                  const colorMap = {
+                    red: 'bg-red-50 border-red-300',
+                    orange: 'bg-orange-50 border-orange-300',
+                    teal: 'bg-teal-50 border-teal-300',
+                    blue: 'bg-blue-50 border-blue-300',
+                    green: 'bg-green-50 border-green-300',
+                  };
+                  const textMap = {
+                    red: 'text-red-700',
+                    orange: 'text-orange-700',
+                    teal: 'text-teal-700',
+                    blue: 'text-blue-700',
+                    green: 'text-green-700',
+                  };
+                  const badgeMap = {
+                    red: 'bg-red-100 text-red-700',
+                    orange: 'bg-orange-100 text-orange-700',
+                    teal: 'bg-teal-100 text-teal-700',
+                    blue: 'bg-blue-100 text-blue-700',
+                    green: 'bg-green-100 text-green-700',
+                  };
+                  const dateObj = new Date(day.date + 'T12:00:00');
+                  const label = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  return (
+                    <div
+                      key={day.date}
+                      title={day.water_impact_desc}
+                      className={`rounded-lg border p-3 w-32 flex-shrink-0 ${colorMap[day.water_impact_color] || 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <p className="text-xs font-semibold text-gray-600 mb-1">{label}</p>
+                      <p className={`text-sm font-bold ${textMap[day.water_impact_color]}`}>
+                        {day.max_temp_f !== null ? `${day.max_temp_f}°F` : '—'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Low: {day.min_temp_f !== null ? `${day.min_temp_f}°F` : '—'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Rain: {day.precipitation_mm > 0 ? `${day.precipitation_mm}mm` : 'None'}
+                      </p>
+                      <div className={`mt-2 text-xs font-semibold px-1.5 py-0.5 rounded text-center ${badgeMap[day.water_impact_color]}`}>
+                        {day.water_impact}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-3 p-3 bg-gray-50 rounded text-xs text-gray-600">
+              <strong>Impact levels explained:</strong> Usage impact is estimated based on temperature and rainfall.
+              Hot, dry days drive higher outdoor irrigation and cooling demand.
+              Rainy or cool days typically reduce water consumption below baseline.
+            </div>
+          </>
+        )}
+      </div>
 
       {forecasts.length === 0 && !generating ? (
         <div className="card text-center py-12">

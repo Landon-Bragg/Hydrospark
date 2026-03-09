@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats } from '../services/api';
+import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats, getWeatherForecast } from '../services/api';
 
 const TYPE_COLORS = {
   Residential: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -15,6 +15,7 @@ function Dashboard() {
   const [forecasts, setForecasts] = useState([]);
   const [zipAverages, setZipAverages] = useState(null); // { zip_code, averages: [] }
   const [adminStats, setAdminStats] = useState(null);
+  const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -40,6 +41,11 @@ function Dashboard() {
         setForecasts(forecastsRes.data.forecasts?.slice(0, 5) || []);
         if (zipRes.data.zip_code) {
           setZipAverages(zipRes.data);
+        }
+        // Load weather for customer's zip
+        const zip = user?.customer?.zip_code;
+        if (zip) {
+          getWeatherForecast(zip).then((r) => setWeather(r.data)).catch(() => {});
         }
       }
       // For admin/billing, load system stats
@@ -204,6 +210,55 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Weather Widget */}
+      {weather && weather.days && weather.days.length > 0 && (() => {
+        const today = weather.days[0];
+        const colorMap = {
+          red: 'from-red-500 to-red-600',
+          orange: 'from-orange-500 to-orange-600',
+          teal: 'from-teal-500 to-teal-600',
+          blue: 'from-blue-500 to-blue-600',
+          green: 'from-green-500 to-green-600',
+        };
+        const next5 = weather.days.slice(1, 6);
+        return (
+          <div className="card mb-6">
+            <div className="flex flex-wrap gap-4 items-start">
+              <div className={`rounded-xl bg-gradient-to-br ${colorMap[today.water_impact_color] || 'from-gray-500 to-gray-600'} text-white p-4 min-w-40`}>
+                <p className="text-xs font-semibold opacity-80 mb-1">Today · {weather.location}</p>
+                <p className="text-4xl font-bold">{today.max_temp_f !== null ? `${today.max_temp_f}°` : '—'}</p>
+                <p className="text-sm opacity-90">Low {today.min_temp_f !== null ? `${today.min_temp_f}°F` : '—'}</p>
+                <p className="text-sm opacity-90 mt-0.5">Rain: {today.precipitation_mm > 0 ? `${today.precipitation_mm}mm` : 'None'}</p>
+                <div className="mt-2 bg-white bg-opacity-20 rounded px-2 py-0.5 text-xs font-bold text-center">
+                  Usage: {today.water_impact}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-hydro-deep-aqua mb-1">Water Usage Outlook</h3>
+                <p className="text-sm text-gray-600 mb-3">{today.water_impact_desc}</p>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {next5.map((day) => {
+                    const d = new Date(day.date + 'T12:00:00');
+                    const badgeMap = { red: 'bg-red-100 text-red-700', orange: 'bg-orange-100 text-orange-700', teal: 'bg-teal-100 text-teal-700', blue: 'bg-blue-100 text-blue-700', green: 'bg-green-100 text-green-700' };
+                    return (
+                      <div key={day.date} className="text-center flex-shrink-0 w-16">
+                        <p className="text-xs text-gray-500">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                        <p className="text-sm font-semibold">{day.max_temp_f !== null ? `${day.max_temp_f}°` : '—'}</p>
+                        <p className="text-xs text-gray-400">{day.precipitation_mm > 0 ? `${day.precipitation_mm}mm` : '☀'}</p>
+                        <span className={`text-xs px-1 py-0.5 rounded font-medium ${badgeMap[day.water_impact_color]}`}>
+                          {day.water_impact === 'Below Normal' ? 'Low' : day.water_impact === 'Very High' ? 'V.High' : day.water_impact}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Full 14-day outlook on the Forecasts page.</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">

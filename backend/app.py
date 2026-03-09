@@ -87,6 +87,7 @@ from routes.billing import billing_bp
 from routes.forecasts import forecasts_bp
 from routes.alerts import alerts_bp
 from routes.admin import admin_bp
+from routes.weather import weather_bp
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(customers_bp, url_prefix='/api/customers')
@@ -95,6 +96,7 @@ app.register_blueprint(billing_bp, url_prefix='/api/billing')
 app.register_blueprint(forecasts_bp, url_prefix='/api/forecasts')
 app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
+app.register_blueprint(weather_bp, url_prefix='/api/weather')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

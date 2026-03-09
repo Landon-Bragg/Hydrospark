@@ -23,6 +23,7 @@ export const login = (email, password) => api.post('/auth/login', { email, passw
 export const register = (data) => api.post('/auth/register', data);
 export const getCurrentUser = () => api.get('/auth/me');
 export const acceptInvite = (data) => api.post('/auth/accept-invite', data);
+export const getWeatherForecast = (zip_code) => api.get('/weather/forecast', { params: { zip_code } });
 
 // Usage
 export const getUsage = (params) => api.get('/usage', { params });
