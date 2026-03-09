@@ -127,12 +127,9 @@ class BillingService:
                             # Create bill
                             due_date = month_end + timedelta(days=15)
                             
-                            # Determine status based on date
+                            # Historical bills are paid; future bills are pending
                             if month_end < datetime.now().date():
-                                if due_date < datetime.now().date():
-                                    status = 'overdue'
-                                else:
-                                    status = 'sent'
+                                status = 'paid'
                             else:
                                 status = 'pending'
                             
@@ -143,7 +140,8 @@ class BillingService:
                                 total_usage_ccf=bill_info['total_usage_ccf'],
                                 total_amount=bill_info['total_amount'],
                                 due_date=due_date,
-                                status=status
+                                status=status,
+                                paid_at=due_date if status == 'paid' else None
                             )
                             db.session.add(bill)
                             total_bills += 1
