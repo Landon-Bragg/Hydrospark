@@ -23,6 +23,13 @@ function Dashboard() {
     loadData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const zip = user?.customer?.zip_code;
+    if (zip && !weather) {
+      getWeatherForecast(zip).then((r) => setWeather(r.data)).catch(() => {});
+    }
+  }, [user?.customer?.zip_code]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -41,11 +48,6 @@ function Dashboard() {
         setForecasts(forecastsRes.data.forecasts?.slice(0, 5) || []);
         if (zipRes.data.zip_code) {
           setZipAverages(zipRes.data);
-        }
-        // Load weather for customer's zip
-        const zip = user?.customer?.zip_code;
-        if (zip) {
-          getWeatherForecast(zip).then((r) => setWeather(r.data)).catch(() => {});
         }
       }
       // For admin/billing, load system stats

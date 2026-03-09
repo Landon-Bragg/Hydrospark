@@ -45,11 +45,14 @@ function Forecasts() {
     } else {
       loadCustomerForecasts();
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     const customerZip = user?.customer?.zip_code;
-    if (customerZip) {
+    if (customerZip && !weather && !weatherLoading) {
       loadWeather(customerZip);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.customer?.zip_code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadWeather = async (zip) => {
     if (!zip) return;

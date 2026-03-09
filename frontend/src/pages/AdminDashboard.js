@@ -30,7 +30,7 @@ function AdminDashboard() {
   const [zipRateError, setZipRateError] = useState(null);
 
   // Invite user
-  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '' });
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '', zip_code: '' });
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteResult, setInviteResult] = useState(null); // { invite_link }
   const [inviteError, setInviteError] = useState(null);
@@ -242,7 +242,7 @@ function AdminDashboard() {
       const token = res.data.invite_token;
       const link = `${window.location.origin}/accept-invite?token=${token}`;
       setInviteResult({ invite_link: link });
-      setInviteForm({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '' });
+      setInviteForm({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '', zip_code: '' });
     } catch (err) {
       setInviteError(err.response?.data?.error || 'Failed to create invite');
     } finally {
@@ -330,6 +330,14 @@ function AdminDashboard() {
               value={inviteForm.mailing_address}
               onChange={(e) => setInviteForm({ ...inviteForm, mailing_address: e.target.value })}
               className="input-field"
+            />
+            <input
+              type="text"
+              placeholder="Zip Code"
+              value={inviteForm.zip_code}
+              onChange={(e) => setInviteForm({ ...inviteForm, zip_code: e.target.value })}
+              className="input-field"
+              maxLength={10}
             />
             <button onClick={handleInviteUser} disabled={inviteLoading} className="btn-primary w-full">
               {inviteLoading ? 'Creating Invite...' : 'Create Invite Link'}
