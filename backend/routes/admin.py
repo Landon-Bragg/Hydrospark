@@ -9,6 +9,7 @@ from services.data_import_service import DataImportService
 from datetime import datetime
 from sqlalchemy import func
 import bcrypt
+import secrets
 
 admin_bp = Blueprint('admin', __name__)
 import_service = DataImportService()
@@ -60,51 +61,56 @@ def approve_user(user_id):
 @admin_bp.route('/users', methods=['POST'])
 @jwt_required()
 def create_user():
-    """Create new user (admin only)"""
+    """Invite a new user (admin only). Creates account and returns an invite token."""
     try:
         current_user_id = int(get_jwt_identity())
         current_user = User.query.get(current_user_id)
-        
+
         if not current_user or current_user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
-        
+
         data = request.get_json()
-        
+
+        if not data.get('email'):
+            return jsonify({'error': 'Email is required'}), 400
+
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already exists'}), 400
-        
-        password_hash = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        
+
+        invite_token = secrets.token_urlsafe(32)
+
         user = User(
             email=data['email'],
-            password_hash=password_hash,
+            password_hash='',  # set by user when they accept the invite
             role=data.get('role', 'customer'),
             first_name=data.get('first_name'),
             last_name=data.get('last_name'),
             phone=data.get('phone'),
-            is_active=True,
-            is_approved=True
+            is_active=False,
+            is_approved=False,
+            invite_token=invite_token,
         )
         db.session.add(user)
         db.session.flush()
-        
-        if data.get('role') == 'customer':
+
+        if data.get('role', 'customer') == 'customer':
             customer = Customer(
                 user_id=user.id,
-                customer_name=data.get('customer_name', f"{data.get('first_name')} {data.get('last_name')}"),
-                mailing_address=data.get('mailing_address'),
+                customer_name=data.get('customer_name') or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or data['email'],
+                mailing_address=data.get('mailing_address', ''),
                 location_id=data.get('location_id'),
-                customer_type=data.get('customer_type', 'Residential')
+                customer_type=data.get('customer_type', 'Residential'),
             )
             db.session.add(customer)
-        
+
         db.session.commit()
-        
+
         return jsonify({
-            'message': 'User created successfully',
-            'user': user.to_dict()
+            'message': 'Invite created successfully',
+            'invite_token': invite_token,
+            'user': user.to_dict(),
         }), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

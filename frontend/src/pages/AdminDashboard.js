@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -28,6 +28,12 @@ function AdminDashboard() {
   const [zipRateForm, setZipRateForm] = useState({ zip_code: '', rate_per_ccf: '', description: '' });
   const [editingZipRate, setEditingZipRate] = useState(null); // id
   const [zipRateError, setZipRateError] = useState(null);
+
+  // Invite user
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '' });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteResult, setInviteResult] = useState(null); // { invite_link }
+  const [inviteError, setInviteError] = useState(null);
 
   // Zip analytics
   const [zipAnalytics, setZipAnalytics] = useState([]);
@@ -226,6 +232,24 @@ function AdminDashboard() {
     }
   };
 
+  const handleInviteUser = async () => {
+    setInviteError(null);
+    setInviteResult(null);
+    if (!inviteForm.email) { setInviteError('Email is required'); return; }
+    setInviteLoading(true);
+    try {
+      const res = await createUser({ ...inviteForm, role: 'customer' });
+      const token = res.data.invite_token;
+      const link = `${window.location.origin}/accept-invite?token=${token}`;
+      setInviteResult({ invite_link: link });
+      setInviteForm({ email: '', first_name: '', last_name: '', customer_type: 'Residential', mailing_address: '' });
+    } catch (err) {
+      setInviteError(err.response?.data?.error || 'Failed to create invite');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Admin Dashboard</h1>
@@ -237,6 +261,82 @@ function AdminDashboard() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Invite User Card */}
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Invite User</h2>
+          <p className="text-gray-600 mb-4">Create a new customer account and share the invite link with them to set their password.</p>
+
+          {inviteError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{inviteError}</div>
+          )}
+
+          {inviteResult && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              <p className="font-semibold mb-1">Invite link created!</p>
+              <p className="text-sm mb-2">Share this link with the new user:</p>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={inviteResult.invite_link}
+                  className="input-field text-xs flex-1"
+                  onClick={(e) => e.target.select()}
+                />
+                <button
+                  className="btn-primary text-sm px-3 py-2 whitespace-nowrap"
+                  onClick={() => navigator.clipboard.writeText(inviteResult.invite_link)}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <input
+              type="email"
+              placeholder="Email *"
+              value={inviteForm.email}
+              onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+              className="input-field"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder="First Name"
+                value={inviteForm.first_name}
+                onChange={(e) => setInviteForm({ ...inviteForm, first_name: e.target.value })}
+                className="input-field"
+              />
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={inviteForm.last_name}
+                onChange={(e) => setInviteForm({ ...inviteForm, last_name: e.target.value })}
+                className="input-field"
+              />
+            </div>
+            <select
+              value={inviteForm.customer_type}
+              onChange={(e) => setInviteForm({ ...inviteForm, customer_type: e.target.value })}
+              className="input-field"
+            >
+              <option value="Residential">Residential</option>
+              <option value="Municipal">Municipal</option>
+              <option value="Commercial">Commercial</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Mailing Address"
+              value={inviteForm.mailing_address}
+              onChange={(e) => setInviteForm({ ...inviteForm, mailing_address: e.target.value })}
+              className="input-field"
+            />
+            <button onClick={handleInviteUser} disabled={inviteLoading} className="btn-primary w-full">
+              {inviteLoading ? 'Creating Invite...' : 'Create Invite Link'}
+            </button>
+          </div>
+        </div>
+
         {/* Data Import Card */}
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">Data Import</h2>
@@ -743,8 +843,21 @@ function AdminDashboard() {
           </div>
         ) : zipAnalytics.length === 0 ? (
           <p className="text-sm text-gray-500">No data yet — generate bills first.</p>
-        ) : (
+        ) : (() => {
+          const sorted = [...zipAnalytics].sort((a, b) =>
+            b.types.reduce((s, t) => s + t.customer_count, 0) -
+            a.types.reduce((s, t) => s + t.customer_count, 0)
+          );
+          const filtered = zipAnalyticsSearch
+            ? sorted.filter((z) => z.zip_code.includes(zipAnalyticsSearch))
+            : sorted.slice(0, 3);
+          return (
           <div className="overflow-x-auto">
+            {!zipAnalyticsSearch && (
+              <p className="text-xs text-gray-400 mb-2">
+                Showing top 3 zip codes by customers. Search above to find any zip code.
+              </p>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-hydro-sky-blue text-left">
@@ -757,8 +870,7 @@ function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {zipAnalytics
-                  .filter((z) => !zipAnalyticsSearch || z.zip_code.includes(zipAnalyticsSearch))
+                {filtered
                   .map((z) => {
                     const totalCustomers = z.types.reduce((s, t) => s + t.customer_count, 0);
                     const totalRevenue = z.types.reduce((s, t) => s + t.total_revenue, 0);
@@ -843,7 +955,8 @@ function AdminDashboard() {
               </tbody>
             </table>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* System Info */}
