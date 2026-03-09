@@ -21,3 +21,4 @@ python-dateutil==2.8.2
 Werkzeug==3.0.1
 cryptography
 openpyxl
+requests==2.31.0
