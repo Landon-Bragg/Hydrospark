@@ -59,6 +59,9 @@ def get_weather_forecast():
     zip_code = request.args.get('zip_code', '').strip()
     if not zip_code:
         return jsonify({'error': 'zip_code is required'}), 400
+    # Normalize zip codes stored as floats (e.g. "75040.0" → "75040")
+    if zip_code.endswith('.0'):
+        zip_code = zip_code[:-2]
 
     try:
         lat, lng, location_name = _geocode_zip(zip_code)
