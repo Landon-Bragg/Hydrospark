@@ -5,7 +5,7 @@ Authentication routes - Login, Register, Token Management
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from database import db, User, Customer, AuditLog
-#import bcrypt
+import bcrypt
 from datetime import datetime
 
 auth_bp = Blueprint('auth', __name__)
@@ -186,7 +186,39 @@ def change_password():
         db.session.commit()
         
         return jsonify({'message': 'Password changed successfully'}), 200
-        
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/accept-invite', methods=['POST'])
+def accept_invite():
+    """Accept an invite: set password and activate account."""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+        password = data.get('password')
+
+        if not token or not password:
+            return jsonify({'error': 'Token and password are required'}), 400
+
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+        user = User.query.filter_by(invite_token=token).first()
+        if not user:
+            return jsonify({'error': 'Invalid or expired invite link'}), 404
+
+        user.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        user.is_active = True
+        user.is_approved = True
+        user.invite_token = None
+
+        db.session.commit()
+
+        return jsonify({'message': 'Account activated. You can now log in.'}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

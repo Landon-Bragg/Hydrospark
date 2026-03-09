@@ -9,6 +9,7 @@ import Forecasts from './pages/Forecasts';
 import Bills from './pages/Bills';
 import Alerts from './pages/Alerts';
 import AdminDashboard from './pages/AdminDashboard';
+import AcceptInvite from './pages/AcceptInvite';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children, requiredRole }) {
@@ -38,6 +39,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Navigate to="/dashboard" />} />

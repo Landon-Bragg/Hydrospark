@@ -34,6 +34,7 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     is_active = db.Column(db.Boolean, default=True)
     is_approved = db.Column(db.Boolean, default=False)
+    invite_token = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -50,6 +51,7 @@ class User(db.Model):
             'phone': self.phone,
             'is_active': self.is_active,
             'is_approved': self.is_approved,
+            'invite_token': self.invite_token,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
