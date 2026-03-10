@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, Bill, WaterUsage, BillingRate
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 billing_bp = Blueprint('billing', __name__)
 
@@ -118,6 +118,94 @@ def generate_bill():
             'bill': bill.to_dict()
         }), 201
         
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/admin/bills', methods=['GET'])
+@jwt_required()
+def admin_search_bills():
+    """Admin: search and filter all bills across customers"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')
+        page = request.args.get('page', 1, type=int)
+        per_page = 25
+
+        query = (
+            db.session.query(Bill, Customer, User)
+            .join(Customer, Bill.customer_id == Customer.id)
+            .join(User, Customer.user_id == User.id)
+        )
+
+        if search:
+            query = query.filter(
+                or_(
+                    Customer.customer_name.ilike(f'%{search}%'),
+                    User.email.ilike(f'%{search}%'),
+                    Customer.location_id.ilike(f'%{search}%'),
+                )
+            )
+
+        if status:
+            query = query.filter(Bill.status == status)
+
+        total = query.count()
+        results = query.order_by(Bill.billing_period_end.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+        bills = []
+        for bill, customer, u in results:
+            d = bill.to_dict()
+            d['customer_name'] = customer.customer_name
+            d['customer_email'] = u.email
+            d['customer_type'] = customer.customer_type
+            d['location_id'] = customer.location_id
+            bills.append(d)
+
+        return jsonify({'bills': bills, 'total': total, 'page': page, 'per_page': per_page}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/bills/<int:bill_id>', methods=['PUT'])
+@jwt_required()
+def update_bill(bill_id):
+    """Admin: adjust a bill's amount, status, or due date"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        bill = Bill.query.get(bill_id)
+        if not bill:
+            return jsonify({'error': 'Bill not found'}), 404
+
+        data = request.get_json()
+
+        if 'total_amount' in data:
+            bill.total_amount = float(data['total_amount'])
+        if 'status' in data:
+            bill.status = data['status']
+            if data['status'] == 'paid' and not bill.paid_at:
+                bill.paid_at = datetime.utcnow()
+            elif data['status'] != 'paid':
+                bill.paid_at = None
+        if 'due_date' in data:
+            bill.due_date = datetime.fromisoformat(data['due_date']).date()
+
+        bill.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'message': 'Bill updated', 'bill': bill.to_dict()}), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
