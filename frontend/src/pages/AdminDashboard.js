@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -34,6 +34,17 @@ function AdminDashboard() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteResult, setInviteResult] = useState(null); // { invite_link }
   const [inviteError, setInviteError] = useState(null);
+
+  // Bill management
+  const [bills, setBills] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const [billsSearch, setBillsSearch] = useState('');
+  const [billsStatus, setBillsStatus] = useState('');
+  const [billsTotal, setBillsTotal] = useState(0);
+  const [billsPage, setBillsPage] = useState(1);
+  const [editingBill, setEditingBill] = useState(null); // { id, total_amount, status, due_date }
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState(null);
 
   // Zip analytics
   const [zipAnalytics, setZipAnalytics] = useState([]);
@@ -247,6 +258,45 @@ function AdminDashboard() {
       setInviteError(err.response?.data?.error || 'Failed to create invite');
     } finally {
       setInviteLoading(false);
+    }
+  };
+
+  const fetchBills = async (search = billsSearch, status = billsStatus, page = billsPage) => {
+    setBillsLoading(true);
+    setBillError(null);
+    try {
+      const res = await adminSearchBills({ search, status, page });
+      setBills(res.data.bills);
+      setBillsTotal(res.data.total);
+    } catch (err) {
+      setBillError(err.response?.data?.error || 'Failed to load bills');
+    } finally {
+      setBillsLoading(false);
+    }
+  };
+
+  const handleBillSearch = (e) => {
+    e.preventDefault();
+    setBillsPage(1);
+    fetchBills(billsSearch, billsStatus, 1);
+  };
+
+  const handleSaveBill = async () => {
+    if (!editingBill) return;
+    setBillSaving(true);
+    setBillError(null);
+    try {
+      await updateBill(editingBill.id, {
+        total_amount: parseFloat(editingBill.total_amount),
+        status: editingBill.status,
+        due_date: editingBill.due_date,
+      });
+      setEditingBill(null);
+      fetchBills();
+    } catch (err) {
+      setBillError(err.response?.data?.error || 'Failed to save bill');
+    } finally {
+      setBillSaving(false);
     }
   };
 
@@ -965,6 +1015,180 @@ function AdminDashboard() {
           </div>
           );
         })()}
+      </div>
+
+      {/* Bill Management */}
+      <div className="card mt-6">
+        <h2 className="text-xl font-semibold mb-1">Bill Management</h2>
+        <p className="text-sm text-gray-500 mb-4">Search and adjust individual bills by customer name, email, or location ID.</p>
+
+        {billError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-3 text-sm">{billError}</div>
+        )}
+
+        <form onSubmit={handleBillSearch} className="flex flex-wrap gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Search by name, email, or location ID..."
+            value={billsSearch}
+            onChange={(e) => setBillsSearch(e.target.value)}
+            className="input-field flex-1 min-w-48"
+          />
+          <select
+            value={billsStatus}
+            onChange={(e) => setBillsStatus(e.target.value)}
+            className="input-field w-36"
+          >
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+            <option value="sent">Sent</option>
+          </select>
+          <button type="submit" className="btn-primary px-5" disabled={billsLoading}>
+            {billsLoading ? 'Searching...' : 'Search'}
+          </button>
+        </form>
+
+        {bills.length === 0 && !billsLoading && (
+          <p className="text-sm text-gray-400 text-center py-6">Search above to find bills.</p>
+        )}
+
+        {bills.length > 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-hydro-sky-blue text-left">
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Customer</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Type</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Period</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Usage (CCF)</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Amount</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Due Date</th>
+                    <th className="px-3 py-2 font-semibold text-hydro-deep-aqua">Status</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bills.map((bill) => (
+                    <tr key={bill.id} className={`border-b hover:bg-gray-50 ${editingBill?.id === bill.id ? 'bg-yellow-50' : ''}`}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium">{bill.customer_name}</p>
+                        <p className="text-xs text-gray-400">{bill.customer_email}</p>
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">{bill.customer_type}</td>
+                      <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                        {bill.billing_period_start} → {bill.billing_period_end}
+                      </td>
+                      <td className="px-3 py-2">{parseFloat(bill.total_usage_ccf).toFixed(2)}</td>
+                      <td className="px-3 py-2 font-semibold">
+                        {editingBill?.id === bill.id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editingBill.total_amount}
+                            onChange={(e) => setEditingBill({ ...editingBill, total_amount: e.target.value })}
+                            className="input-field w-24 text-sm py-1"
+                          />
+                        ) : (
+                          `$${parseFloat(bill.total_amount).toFixed(2)}`
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {editingBill?.id === bill.id ? (
+                          <input
+                            type="date"
+                            value={editingBill.due_date}
+                            onChange={(e) => setEditingBill({ ...editingBill, due_date: e.target.value })}
+                            className="input-field text-sm py-1"
+                          />
+                        ) : (
+                          bill.due_date
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {editingBill?.id === bill.id ? (
+                          <select
+                            value={editingBill.status}
+                            onChange={(e) => setEditingBill({ ...editingBill, status: e.target.value })}
+                            className="input-field text-sm py-1"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="paid">Paid</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="sent">Sent</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            bill.status === 'paid' ? 'bg-green-100 text-green-700'
+                            : bill.status === 'overdue' ? 'bg-red-100 text-red-700'
+                            : bill.status === 'sent' ? 'bg-blue-100 text-blue-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {bill.status}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right">
+                        {editingBill?.id === bill.id ? (
+                          <>
+                            <button
+                              onClick={handleSaveBill}
+                              disabled={billSaving}
+                              className="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 mr-1"
+                            >
+                              {billSaving ? '...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => setEditingBill(null)}
+                              className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setEditingBill({
+                              id: bill.id,
+                              total_amount: parseFloat(bill.total_amount).toFixed(2),
+                              status: bill.status,
+                              due_date: bill.due_date,
+                            })}
+                            className="text-xs px-2 py-1 rounded border border-hydro-deep-aqua text-hydro-deep-aqua hover:bg-hydro-sky-blue"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-xs text-gray-500">
+                Showing {bills.length} of {billsTotal} bills (page {billsPage})
+              </p>
+              <div className="flex gap-2">
+                <button
+                  disabled={billsPage === 1}
+                  onClick={() => { const p = billsPage - 1; setBillsPage(p); fetchBills(billsSearch, billsStatus, p); }}
+                  className="text-xs px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={billsPage * 25 >= billsTotal}
+                  onClick={() => { const p = billsPage + 1; setBillsPage(p); fetchBills(billsSearch, billsStatus, p); }}
+                  className="text-xs px-3 py-1 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* System Info */}
