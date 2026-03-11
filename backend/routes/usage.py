@@ -147,10 +147,17 @@ def get_top_customers():
         end_date = request.args.get('end_date')
         limit = request.args.get('limit', 15, type=int)
 
-        query = db.session.query(
-            WaterUsage.customer_id,
-            func.sum(WaterUsage.daily_usage_ccf).label('total_usage'),
-            func.count(WaterUsage.id).label('record_count')
+        query = (
+            db.session.query(
+                WaterUsage.customer_id,
+                func.sum(WaterUsage.daily_usage_ccf).label('total_usage'),
+                func.count(WaterUsage.id).label('record_count'),
+                Customer.customer_name,
+                Customer.customer_type,
+                User.email,
+            )
+            .join(Customer, Customer.id == WaterUsage.customer_id)
+            .join(User, User.id == Customer.user_id)
         )
 
         if start_date:
@@ -158,18 +165,19 @@ def get_top_customers():
         if end_date:
             query = query.filter(WaterUsage.usage_date <= end_date)
 
-        results = query.group_by(WaterUsage.customer_id).order_by(
+        results = query.group_by(
+            WaterUsage.customer_id, Customer.customer_name, Customer.customer_type, User.email
+        ).order_by(
             func.sum(WaterUsage.daily_usage_ccf).desc()
         ).limit(limit).all()
 
         output = []
         for row in results:
-            customer = Customer.query.get(row.customer_id)
             output.append({
                 'customer_id': row.customer_id,
-                'customer_name': customer.customer_name if customer else f'Customer {row.customer_id}',
-                'customer_email': customer.user.email if customer and customer.user else None,
-                'customer_type': customer.customer_type if customer else None,
+                'customer_name': row.customer_name or f'Customer {row.customer_id}',
+                'customer_email': row.email,
+                'customer_type': row.customer_type,
                 'total_usage_ccf': float(row.total_usage),
                 'record_count': int(row.record_count)
             })

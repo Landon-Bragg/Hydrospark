@@ -53,46 +53,24 @@ function AdminDashboard() {
   const [expandedZip, setExpandedZip] = useState(null);
 
   useEffect(() => {
-    const fetchCharges = async () => {
-      setChargesLoading(true);
-      setChargesError(null);
-      try {
-        const response = await getAdminCharges();
-        setCharges(response.data.customers);
-      } catch (err) {
-        setChargesError(err.response?.data?.error || 'Failed to load charges');
-      } finally {
-        setChargesLoading(false);
-      }
-    };
-
-    const fetchZipRates = async () => {
-      setZipRatesLoading(true);
-      try {
-        const response = await getZipRates();
-        setZipRates(response.data.zip_rates);
-      } catch (err) {
-        // non-fatal
-      } finally {
-        setZipRatesLoading(false);
-      }
-    };
-
-    const fetchZipAnalytics = async () => {
-      setZipAnalyticsLoading(true);
-      try {
-        const response = await getZipAnalytics();
-        setZipAnalytics(response.data.zip_analytics);
-      } catch (err) {
-        // non-fatal
-      } finally {
-        setZipAnalyticsLoading(false);
-      }
-    };
-
-    fetchCharges();
-    fetchZipRates();
-    fetchZipAnalytics();
+    setChargesLoading(true);
+    setZipRatesLoading(true);
+    setZipAnalyticsLoading(true);
+    Promise.all([
+      getAdminCharges()
+        .then(r => setCharges(r.data.customers))
+        .catch(err => setChargesError(err.response?.data?.error || 'Failed to load charges')),
+      getZipRates()
+        .then(r => setZipRates(r.data.zip_rates))
+        .catch(() => {}),
+      getZipAnalytics()
+        .then(r => setZipAnalytics(r.data.zip_analytics))
+        .catch(() => {}),
+    ]).finally(() => {
+      setChargesLoading(false);
+      setZipRatesLoading(false);
+      setZipAnalyticsLoading(false);
+    });
   }, []);
 
   const openRateEditor = (customer) => {
@@ -111,8 +89,11 @@ function AdminDashboard() {
         zip_code: rateEditValues.zip_code,
       };
       await setCustomerRate(customerId, payload);
-      const response = await getAdminCharges();
-      setCharges(response.data.customers);
+      setCharges(prev => prev.map(c =>
+        c.customer_id === customerId
+          ? { ...c, custom_rate_per_ccf: payload.custom_rate_per_ccf, zip_code: payload.zip_code }
+          : c
+      ));
       setEditingRateFor(null);
     } catch (err) {
       setChargesError(err.response?.data?.error || 'Failed to save rate');
@@ -125,19 +106,17 @@ function AdminDashboard() {
     setZipRateError(null);
     try {
       if (editingZipRate) {
-        await updateZipRate(editingZipRate, {
-          rate_per_ccf: parseFloat(zipRateForm.rate_per_ccf),
-          description: zipRateForm.description,
-        });
+        const updated = { rate_per_ccf: parseFloat(zipRateForm.rate_per_ccf), description: zipRateForm.description };
+        await updateZipRate(editingZipRate, updated);
+        setZipRates(prev => prev.map(r => r.id === editingZipRate ? { ...r, ...updated } : r));
       } else {
-        await createZipRate({
+        const res = await createZipRate({
           zip_code: zipRateForm.zip_code,
           rate_per_ccf: parseFloat(zipRateForm.rate_per_ccf),
           description: zipRateForm.description,
         });
+        setZipRates(prev => [...prev, res.data.zip_rate]);
       }
-      const response = await getZipRates();
-      setZipRates(response.data.zip_rates);
       setZipRateForm({ zip_code: '', rate_per_ccf: '', description: '' });
       setEditingZipRate(null);
     } catch (err) {

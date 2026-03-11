@@ -7,7 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, AuditLog, Bill, ZipCodeRate, WaterUsage
 from services.data_import_service import DataImportService
 from datetime import datetime
-from sqlalchemy import func
+from sqlalchemy import func, case
 import bcrypt
 import secrets
 
@@ -126,30 +126,49 @@ def get_charges_by_user():
         if not user or user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
 
-        customers = Customer.query.all()
+        # Single query: aggregate bill stats per customer with user email via JOIN
+        agg = (
+            db.session.query(
+                Customer.id,
+                Customer.customer_name,
+                Customer.customer_type,
+                Customer.location_id,
+                Customer.zip_code,
+                Customer.custom_rate_per_ccf,
+                User.email,
+                func.count(Bill.id).label('bill_count'),
+                func.coalesce(func.sum(Bill.total_amount), 0).label('total_amount'),
+                func.sum(case((Bill.status == 'paid', 1), else_=0)).label('paid'),
+                func.sum(case((Bill.status == 'pending', 1), else_=0)).label('pending'),
+                func.sum(case((Bill.status == 'overdue', 1), else_=0)).label('overdue'),
+                func.sum(case((Bill.status == 'sent', 1), else_=0)).label('sent'),
+            )
+            .outerjoin(Bill, Bill.customer_id == Customer.id)
+            .outerjoin(User, User.id == Customer.user_id)
+            .group_by(Customer.id, User.email)
+            .order_by(Customer.customer_name)
+            .all()
+        )
+
         result = []
-        for customer in customers:
-            bills = Bill.query.filter_by(customer_id=customer.id).order_by(Bill.billing_period_end.desc()).all()
-            total_amount = sum(float(b.total_amount) for b in bills)
+        for row in agg:
             status_counts = {}
-            for b in bills:
-                status_counts[b.status] = status_counts.get(b.status, 0) + 1
-
-            email = customer.user.email if customer.user else None
-
+            for s in ('paid', 'pending', 'overdue', 'sent'):
+                v = int(getattr(row, s) or 0)
+                if v:
+                    status_counts[s] = v
             result.append({
-                'customer_id': customer.id,
-                'customer_name': customer.customer_name,
-                'email': email,
-                'customer_type': customer.customer_type,
-                'location_id': customer.location_id,
-                'bill_count': len(bills),
-                'total_amount': round(total_amount, 2),
+                'customer_id': row.id,
+                'customer_name': row.customer_name,
+                'email': row.email,
+                'customer_type': row.customer_type,
+                'location_id': row.location_id,
+                'zip_code': row.zip_code,
+                'custom_rate_per_ccf': float(row.custom_rate_per_ccf) if row.custom_rate_per_ccf else None,
+                'bill_count': int(row.bill_count),
+                'total_amount': round(float(row.total_amount), 2),
                 'status_counts': status_counts,
-                'bills': [b.to_dict() for b in bills],
             })
-
-        result.sort(key=lambda c: c['customer_name'] or '')
 
         return jsonify({'customers': result}), 200
     except Exception as e:
