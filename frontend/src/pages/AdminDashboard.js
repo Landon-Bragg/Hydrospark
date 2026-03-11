@@ -56,7 +56,11 @@ function AdminDashboard() {
   const [delinquent, setDelinquent] = useState([]);
   const [delinquentLoading, setDelinquentLoading] = useState(false);
   const [delinquentSearch, setDelinquentSearch] = useState('');
-  const [shutoffWorking, setShutoffWorking] = useState(null); // customer_id being actioned
+  const [shutoffWorking, setShutoffWorking] = useState(null);
+
+  // General water service search (searches all customers from charges)
+  const [waterSearch, setWaterSearch] = useState('');
+  const [waterSearchActive, setWaterSearchActive] = useState(false);
 
   useEffect(() => {
     setChargesLoading(true);
@@ -91,11 +95,9 @@ function AdminDashboard() {
         ? await restoreWater(customerId)
         : await shutoffWater(customerId, mode);
       const updated = res.data.customer;
-      setDelinquent(prev => prev.map(c =>
-        c.customer_id === customerId
-          ? { ...c, water_status: updated.water_status, shutoff_notice_at: updated.shutoff_notice_at, shutoff_at: updated.shutoff_at }
-          : c
-      ));
+      const patch = { water_status: updated.water_status, shutoff_notice_at: updated.shutoff_notice_at, shutoff_at: updated.shutoff_at };
+      setDelinquent(prev => prev.map(c => c.customer_id === customerId ? { ...c, ...patch } : c));
+      setCharges(prev => prev.map(c => c.customer_id === customerId ? { ...c, ...patch } : c));
     } catch (err) {
       alert(err.response?.data?.error || 'Action failed');
     } finally {
@@ -1220,6 +1222,100 @@ function AdminDashboard() {
             <p className="text-xs text-gray-500 mt-1">8 years of data</p>
           </div>
         </div>
+      </div>
+
+      {/* General Water Service Search */}
+      <div className="card mt-8">
+        <h2 className="text-xl font-bold text-hydro-deep-aqua flex items-center gap-2 mb-1">
+          <span>🔍</span> Manage Water Service by Customer
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">Search any customer to view or change their water service status.</p>
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Search by name, email, or location ID..."
+            value={waterSearch}
+            onChange={e => { setWaterSearch(e.target.value); setWaterSearchActive(e.target.value.trim().length > 0); }}
+            className="input-field flex-1 text-sm"
+          />
+          {waterSearch && (
+            <button onClick={() => { setWaterSearch(''); setWaterSearchActive(false); }} className="text-sm px-3 py-1.5 border rounded text-gray-600 hover:bg-gray-100">
+              Clear
+            </button>
+          )}
+        </div>
+
+        {waterSearchActive && (() => {
+          const q = waterSearch.toLowerCase();
+          const results = charges.filter(c =>
+            c.customer_name?.toLowerCase().includes(q) ||
+            c.email?.toLowerCase().includes(q) ||
+            c.location_id?.toLowerCase().includes(q)
+          );
+          const statusColor = { active: 'bg-green-100 text-green-700', pending_shutoff: 'bg-yellow-100 text-yellow-800', shutoff: 'bg-red-100 text-red-700' };
+          const statusLabel = { active: 'Active', pending_shutoff: 'Notice Sent', shutoff: 'Shut Off' };
+          if (results.length === 0) {
+            return <p className="text-sm text-gray-400 py-4 text-center">No customers found for "{waterSearch}"</p>;
+          }
+          return (
+            <div className="divide-y divide-gray-100 border rounded-lg overflow-hidden">
+              {results.slice(0, 20).map(c => (
+                <div key={c.customer_id} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${c.water_status === 'shutoff' ? 'bg-red-50' : c.water_status === 'pending_shutoff' ? 'bg-yellow-50' : 'bg-white'}`}>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm">{c.customer_name}</p>
+                    <p className="text-xs text-gray-500">{c.email} · {c.customer_type} · {c.location_id}</p>
+                    {c.shutoff_notice_at && <p className="text-xs text-yellow-700 mt-0.5">Notice: {new Date(c.shutoff_notice_at).toLocaleDateString()}</p>}
+                    {c.shutoff_at && <p className="text-xs text-red-700 mt-0.5">Shut off: {new Date(c.shutoff_at).toLocaleDateString()}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColor[c.water_status] || statusColor.active}`}>
+                      {statusLabel[c.water_status] || 'Active'}
+                    </span>
+                    {c.water_status === 'active' && (
+                      <button
+                        onClick={() => handleShutoffAction(c.customer_id, 'notice')}
+                        disabled={shutoffWorking === c.customer_id}
+                        className="text-xs px-3 py-1.5 rounded font-semibold bg-yellow-100 text-yellow-800 hover:bg-yellow-200 disabled:opacity-50"
+                      >
+                        {shutoffWorking === c.customer_id ? '...' : 'Send Notice'}
+                      </button>
+                    )}
+                    {c.water_status === 'pending_shutoff' && (
+                      <>
+                        <button
+                          onClick={() => handleShutoffAction(c.customer_id, 'shutoff')}
+                          disabled={shutoffWorking === c.customer_id}
+                          className="text-xs px-3 py-1.5 rounded font-semibold bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                        >
+                          {shutoffWorking === c.customer_id ? '...' : 'Shut Off'}
+                        </button>
+                        <button
+                          onClick={() => handleShutoffAction(c.customer_id, 'restore')}
+                          disabled={shutoffWorking === c.customer_id}
+                          className="text-xs px-3 py-1.5 rounded font-semibold bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                        >
+                          Restore
+                        </button>
+                      </>
+                    )}
+                    {c.water_status === 'shutoff' && (
+                      <button
+                        onClick={() => handleShutoffAction(c.customer_id, 'restore')}
+                        disabled={shutoffWorking === c.customer_id}
+                        className="text-xs px-3 py-1.5 rounded font-semibold bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                      >
+                        {shutoffWorking === c.customer_id ? '...' : 'Restore Service'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {results.length > 20 && (
+                <p className="text-xs text-gray-400 text-center py-2">Showing 20 of {results.length} — refine your search</p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Water Shutoff Management */}
