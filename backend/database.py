@@ -70,6 +70,9 @@ class Customer(db.Model):
     business_name = db.Column(db.String(255))
     facility_name = db.Column(db.String(255))
     custom_rate_per_ccf = db.Column(db.Numeric(10, 4), nullable=True)
+    water_status = db.Column(db.Enum('active', 'pending_shutoff', 'shutoff'), default='active')
+    shutoff_notice_at = db.Column(db.DateTime, nullable=True)
+    shutoff_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -92,7 +95,10 @@ class Customer(db.Model):
             'cycle_number': self.cycle_number,
             'business_name': self.business_name,
             'facility_name': self.facility_name,
-            'custom_rate_per_ccf': float(self.custom_rate_per_ccf) if self.custom_rate_per_ccf else None
+            'custom_rate_per_ccf': float(self.custom_rate_per_ccf) if self.custom_rate_per_ccf else None,
+            'water_status': self.water_status or 'active',
+            'shutoff_notice_at': self.shutoff_notice_at.isoformat() if self.shutoff_notice_at else None,
+            'shutoff_at': self.shutoff_at.isoformat() if self.shutoff_at else None,
         }
 
 # Water Usage Model

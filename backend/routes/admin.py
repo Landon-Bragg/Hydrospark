@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, AuditLog, Bill, ZipCodeRate, WaterUsage
 from services.data_import_service import DataImportService
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import func, case
 import bcrypt
 import secrets
@@ -172,6 +172,148 @@ def get_charges_by_user():
 
         return jsonify({'customers': result}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/delinquent', methods=['GET'])
+@jwt_required()
+def get_delinquent_customers():
+    """Customers with unpaid bills older than 90 days."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        cutoff = datetime.utcnow().date() - timedelta(days=90)
+
+        # Customers with at least one unpaid bill past the 90-day cutoff
+        rows = (
+            db.session.query(
+                Customer.id,
+                Customer.customer_name,
+                Customer.customer_type,
+                Customer.location_id,
+                Customer.zip_code,
+                Customer.water_status,
+                Customer.shutoff_notice_at,
+                Customer.shutoff_at,
+                User.email,
+                func.count(Bill.id).label('unpaid_count'),
+                func.sum(Bill.total_amount).label('unpaid_total'),
+                func.min(Bill.due_date).label('oldest_due'),
+            )
+            .join(Bill, Bill.customer_id == Customer.id)
+            .outerjoin(User, User.id == Customer.user_id)
+            .filter(
+                Bill.status.in_(['overdue', 'pending', 'sent']),
+                Bill.due_date < cutoff,
+            )
+            .group_by(Customer.id, User.email)
+            .order_by(func.min(Bill.due_date))
+            .all()
+        )
+
+        result = [
+            {
+                'customer_id': r.id,
+                'customer_name': r.customer_name,
+                'customer_type': r.customer_type,
+                'location_id': r.location_id,
+                'zip_code': r.zip_code,
+                'email': r.email,
+                'water_status': r.water_status or 'active',
+                'shutoff_notice_at': r.shutoff_notice_at.isoformat() if r.shutoff_notice_at else None,
+                'shutoff_at': r.shutoff_at.isoformat() if r.shutoff_at else None,
+                'unpaid_count': int(r.unpaid_count),
+                'unpaid_total': round(float(r.unpaid_total), 2),
+                'oldest_due': r.oldest_due.isoformat() if r.oldest_due else None,
+            }
+            for r in rows
+        ]
+
+        return jsonify({'delinquent': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/customers/<int:customer_id>/shutoff', methods=['POST'])
+@jwt_required()
+def shutoff_water(customer_id):
+    """Mark a customer's water as shut off and send notification."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+
+        now = datetime.utcnow()
+        action = request.get_json(silent=True) or {}
+        mode = action.get('mode', 'shutoff')  # 'notice' or 'shutoff'
+
+        if mode == 'notice':
+            customer.water_status = 'pending_shutoff'
+            customer.shutoff_notice_at = now
+        else:
+            customer.water_status = 'shutoff'
+            customer.shutoff_at = now
+            if not customer.shutoff_notice_at:
+                customer.shutoff_notice_at = now
+
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action='water_shutoff' if mode == 'shutoff' else 'shutoff_notice',
+            entity_type='customer',
+            entity_id=customer_id,
+            details=f'Water {"shut off" if mode == "shutoff" else "shutoff notice sent"} for customer {customer.customer_name}',
+            ip_address=request.remote_addr,
+        ))
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Water {"shut off" if mode == "shutoff" else "shutoff notice sent"} successfully.',
+            'customer': customer.to_dict(),
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/customers/<int:customer_id>/restore', methods=['POST'])
+@jwt_required()
+def restore_water(customer_id):
+    """Restore water service for a customer."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+
+        customer.water_status = 'active'
+        customer.shutoff_at = None
+        customer.shutoff_notice_at = None
+
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action='water_restored',
+            entity_type='customer',
+            entity_id=customer_id,
+            details=f'Water service restored for customer {customer.customer_name}',
+            ip_address=request.remote_addr,
+        ))
+        db.session.commit()
+
+        return jsonify({'message': 'Water service restored.', 'customer': customer.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
