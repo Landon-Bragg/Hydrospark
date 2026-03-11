@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater } from '../services/api';
 import axios from 'axios';
 
 function AdminDashboard() {
@@ -52,10 +52,17 @@ function AdminDashboard() {
   const [zipAnalyticsSearch, setZipAnalyticsSearch] = useState('');
   const [expandedZip, setExpandedZip] = useState(null);
 
+  // Water shutoff management
+  const [delinquent, setDelinquent] = useState([]);
+  const [delinquentLoading, setDelinquentLoading] = useState(false);
+  const [delinquentSearch, setDelinquentSearch] = useState('');
+  const [shutoffWorking, setShutoffWorking] = useState(null); // customer_id being actioned
+
   useEffect(() => {
     setChargesLoading(true);
     setZipRatesLoading(true);
     setZipAnalyticsLoading(true);
+    setDelinquentLoading(true);
     Promise.all([
       getAdminCharges()
         .then(r => setCharges(r.data.customers))
@@ -66,12 +73,35 @@ function AdminDashboard() {
       getZipAnalytics()
         .then(r => setZipAnalytics(r.data.zip_analytics))
         .catch(() => {}),
+      getDelinquent()
+        .then(r => setDelinquent(r.data.delinquent))
+        .catch(() => {}),
     ]).finally(() => {
       setChargesLoading(false);
       setZipRatesLoading(false);
       setZipAnalyticsLoading(false);
+      setDelinquentLoading(false);
     });
   }, []);
+
+  const handleShutoffAction = async (customerId, mode) => {
+    setShutoffWorking(customerId);
+    try {
+      const res = mode === 'restore'
+        ? await restoreWater(customerId)
+        : await shutoffWater(customerId, mode);
+      const updated = res.data.customer;
+      setDelinquent(prev => prev.map(c =>
+        c.customer_id === customerId
+          ? { ...c, water_status: updated.water_status, shutoff_notice_at: updated.shutoff_notice_at, shutoff_at: updated.shutoff_at }
+          : c
+      ));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Action failed');
+    } finally {
+      setShutoffWorking(null);
+    }
+  };
 
   const openRateEditor = (customer) => {
     setEditingRateFor(customer.customer_id);
@@ -1190,6 +1220,144 @@ function AdminDashboard() {
             <p className="text-xs text-gray-500 mt-1">8 years of data</p>
           </div>
         </div>
+      </div>
+
+      {/* Water Shutoff Management */}
+      <div className="card mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-hydro-deep-aqua flex items-center gap-2">
+              <span>🚰</span> Water Shutoff Management
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Customers with unpaid bills older than 90 days. Send a notice or shut off service directly.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {delinquent.length > 0 && (
+              <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full">
+                {delinquent.length} delinquent account{delinquent.length !== 1 ? 's' : ''}
+              </span>
+            )}
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              value={delinquentSearch}
+              onChange={e => setDelinquentSearch(e.target.value)}
+              className="input-field text-sm w-56"
+            />
+          </div>
+        </div>
+
+        {delinquentLoading && (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-hydro-spark-blue"></div>
+            <p className="text-sm text-gray-500 mt-2">Checking for delinquent accounts...</p>
+          </div>
+        )}
+
+        {!delinquentLoading && delinquent.length === 0 && (
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-3xl mb-2">✅</p>
+            <p className="text-sm font-medium">No delinquent accounts — all customers are current.</p>
+          </div>
+        )}
+
+        {!delinquentLoading && delinquent.length > 0 && (() => {
+          const filtered = delinquent.filter(c =>
+            !delinquentSearch ||
+            c.customer_name?.toLowerCase().includes(delinquentSearch.toLowerCase()) ||
+            c.email?.toLowerCase().includes(delinquentSearch.toLowerCase()) ||
+            c.location_id?.includes(delinquentSearch)
+          );
+          const statusColor = { active: 'bg-green-100 text-green-700', pending_shutoff: 'bg-yellow-100 text-yellow-800', shutoff: 'bg-red-100 text-red-700' };
+          const statusLabel = { active: 'Active', pending_shutoff: 'Notice Sent', shutoff: 'Shut Off' };
+          return (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Customer</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Unpaid Bills</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Amount Owed</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Oldest Due</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filtered.map(c => (
+                    <tr key={c.customer_id} className={`hover:bg-gray-50 ${c.water_status === 'shutoff' ? 'bg-red-50' : c.water_status === 'pending_shutoff' ? 'bg-yellow-50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-gray-800">{c.customer_name}</p>
+                        <p className="text-xs text-gray-500">{c.email}</p>
+                        {c.shutoff_notice_at && (
+                          <p className="text-xs text-yellow-700 mt-0.5">Notice sent {new Date(c.shutoff_notice_at).toLocaleDateString()}</p>
+                        )}
+                        {c.shutoff_at && (
+                          <p className="text-xs text-red-700 mt-0.5">Shut off {new Date(c.shutoff_at).toLocaleDateString()}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{c.customer_type}</td>
+                      <td className="px-4 py-3 font-semibold text-red-600">{c.unpaid_count}</td>
+                      <td className="px-4 py-3 font-semibold text-red-600">${c.unpaid_total?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 text-gray-600">{c.oldest_due ? new Date(c.oldest_due + 'T00:00:00').toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColor[c.water_status] || statusColor.active}`}>
+                          {statusLabel[c.water_status] || 'Active'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 flex-wrap">
+                          {c.water_status === 'active' && (
+                            <button
+                              onClick={() => handleShutoffAction(c.customer_id, 'notice')}
+                              disabled={shutoffWorking === c.customer_id}
+                              className="text-xs px-3 py-1.5 rounded font-semibold bg-yellow-100 text-yellow-800 hover:bg-yellow-200 disabled:opacity-50"
+                            >
+                              {shutoffWorking === c.customer_id ? '...' : 'Send Notice'}
+                            </button>
+                          )}
+                          {c.water_status === 'pending_shutoff' && (
+                            <>
+                              <button
+                                onClick={() => handleShutoffAction(c.customer_id, 'shutoff')}
+                                disabled={shutoffWorking === c.customer_id}
+                                className="text-xs px-3 py-1.5 rounded font-semibold bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                              >
+                                {shutoffWorking === c.customer_id ? '...' : 'Shut Off Water'}
+                              </button>
+                              <button
+                                onClick={() => handleShutoffAction(c.customer_id, 'restore')}
+                                disabled={shutoffWorking === c.customer_id}
+                                className="text-xs px-3 py-1.5 rounded font-semibold bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                              >
+                                Restore
+                              </button>
+                            </>
+                          )}
+                          {c.water_status === 'shutoff' && (
+                            <button
+                              onClick={() => handleShutoffAction(c.customer_id, 'restore')}
+                              disabled={shutoffWorking === c.customer_id}
+                              className="text-xs px-3 py-1.5 rounded font-semibold bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                            >
+                              {shutoffWorking === c.customer_id ? '...' : 'Restore Service'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && delinquentSearch && (
+                <p className="text-center text-gray-400 text-sm py-4">No results for "{delinquentSearch}"</p>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

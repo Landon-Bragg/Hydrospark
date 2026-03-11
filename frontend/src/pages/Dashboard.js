@@ -153,10 +153,47 @@ function Dashboard() {
   }
 
   // Customer Dashboard
+  const waterStatus = user?.customer?.water_status;
   return (
     <div>
       <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Dashboard</h1>
-      
+
+      {waterStatus === 'shutoff' && (
+        <div className="mb-6 rounded-xl border-2 border-red-400 bg-red-50 p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">🚫</span>
+            <div>
+              <p className="text-lg font-bold text-red-700">Water Service Suspended</p>
+              <p className="text-sm text-red-600 mt-1">
+                Your water service has been shut off due to an outstanding balance on your account.
+                Please pay your overdue bills and contact us immediately to restore service.
+              </p>
+              <a href="/bills" className="inline-block mt-3 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+                View & Pay Bills
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {waterStatus === 'pending_shutoff' && (
+        <div className="mb-6 rounded-xl border-2 border-yellow-400 bg-yellow-50 p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">⚠️</span>
+            <div>
+              <p className="text-lg font-bold text-yellow-800">Water Shutoff Notice</p>
+              <p className="text-sm text-yellow-700 mt-1">
+                Your account has an overdue balance. If payment is not received, your water service
+                will be shut off. Please pay your outstanding bills as soon as possible to avoid interruption.
+              </p>
+              <a href="/bills" className="inline-block mt-3 text-sm font-semibold text-white bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded">
+                View & Pay Bills
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
           {error}

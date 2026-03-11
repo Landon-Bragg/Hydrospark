@@ -58,6 +58,9 @@ export const getZipAnalytics = () => api.get('/admin/zip-analytics');
 export const getAdminStats = () => api.get('/admin/stats');
 export const approveUser = (id) => api.post(`/admin/users/${id}/approve`);
 export const createUser = (data) => api.post('/admin/users', data);
+export const getDelinquent = () => api.get('/admin/delinquent');
+export const shutoffWater = (id, mode) => api.post(`/admin/customers/${id}/shutoff`, { mode });
+export const restoreWater = (id) => api.post(`/admin/customers/${id}/restore`);
 export const importData = (formData) => api.post('/admin/import/usage', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
