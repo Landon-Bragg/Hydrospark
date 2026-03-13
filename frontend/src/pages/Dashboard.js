@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats, getWeatherForecast } from '../services/api';
+import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats, getWeatherForecast, getBills } from '../services/api';
 
 const TYPE_COLORS = {
   Residential: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -16,6 +16,7 @@ function Dashboard() {
   const [zipAverages, setZipAverages] = useState(null); // { zip_code, averages: [] }
   const [adminStats, setAdminStats] = useState(null);
   const [weather, setWeather] = useState(null);
+  const [unpaidBills, setUnpaidBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -37,11 +38,12 @@ function Dashboard() {
 
       // For customers, load their data
       if (user?.role === 'customer') {
-        const [summaryRes, alertsRes, forecastsRes, zipRes] = await Promise.all([
+        const [summaryRes, alertsRes, forecastsRes, zipRes, billsRes] = await Promise.all([
           getUsageSummary().catch(() => ({ data: { summary: null } })),
           getAlerts({ status: 'new' }).catch(() => ({ data: { alerts: [] } })),
           getForecasts().catch(() => ({ data: { forecasts: [] } })),
           getZipAverages().catch(() => ({ data: { zip_code: null, averages: [] } })),
+          getBills().catch(() => ({ data: { bills: [] } })),
         ]);
         setSummary(summaryRes.data.summary);
         setAlerts(alertsRes.data.alerts || []);
@@ -49,6 +51,8 @@ function Dashboard() {
         if (zipRes.data.zip_code) {
           setZipAverages(zipRes.data);
         }
+        const unpaid = (billsRes.data.bills || []).filter(b => b.status === 'pending' || b.status === 'overdue');
+        setUnpaidBills(unpaid);
       }
       // For admin/billing, load system stats
       else {
@@ -193,6 +197,44 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {unpaidBills.length > 0 && (() => {
+        const overdue = unpaidBills.filter(b => b.status === 'overdue');
+        const pending = unpaidBills.filter(b => b.status === 'pending');
+        const totalOwed = unpaidBills.reduce((sum, b) => sum + parseFloat(b.total_amount), 0);
+        const isOverdue = overdue.length > 0;
+        return (
+          <div className={`mb-6 rounded-xl border-2 p-5 ${isOverdue ? 'border-red-400 bg-red-50' : 'border-yellow-400 bg-yellow-50'}`}>
+            <div className="flex items-start gap-3">
+              <span className="text-3xl">{isOverdue ? '🧾' : '📬'}</span>
+              <div className="flex-1">
+                <p className={`text-lg font-bold ${isOverdue ? 'text-red-700' : 'text-yellow-800'}`}>
+                  {isOverdue
+                    ? `You have ${overdue.length} overdue bill${overdue.length > 1 ? 's' : ''}`
+                    : `You have ${pending.length} bill${pending.length > 1 ? 's' : ''} due`}
+                </p>
+                <p className={`text-sm mt-1 ${isOverdue ? 'text-red-600' : 'text-yellow-700'}`}>
+                  Total outstanding balance: <strong>${totalOwed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  {overdue.length > 0 && pending.length > 0 && (
+                    <span className="ml-2 text-xs">({overdue.length} overdue · {pending.length} pending)</span>
+                  )}
+                </p>
+                {isOverdue && (
+                  <p className="text-xs text-red-500 mt-1">
+                    Accounts with unpaid overdue bills may be subject to service interruption.
+                  </p>
+                )}
+                <a
+                  href="/bills"
+                  className={`inline-block mt-3 text-sm font-semibold text-white px-4 py-2 rounded ${isOverdue ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-600 hover:bg-yellow-700'}`}
+                >
+                  View & Pay Bills →
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {error && (
         <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
