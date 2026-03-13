@@ -65,4 +65,7 @@ export const importData = (formData) => api.post('/admin/import/usage', formData
   headers: { 'Content-Type': 'multipart/form-data' }
 });
 
+// Chat
+export const sendChat = (message, history) => api.post('/chat/message', { message, history });
+
 export default api;
