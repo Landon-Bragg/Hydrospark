@@ -1,6 +1,6 @@
 # HydroSpark Water Utility Management System
 
-A water utility management platform with usage tracking, ML-based forecasting, anomaly detection, and automated billing.
+A water utility management platform with usage tracking, ML-based forecasting, anomaly detection, automated billing, and an AI assistant (HydroBot) for account support.
 
 ---
 
@@ -20,8 +20,8 @@ You only need two things installed:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Landon-Bragg/hydrospark-py.git
-cd hydrospark-py
+git clone https://github.com/Landon-Bragg/hydrospark-system.git
+cd hydrospark-system
 ```
 
 ### 2. Create your environment file
@@ -156,17 +156,21 @@ docker-compose up
 
 | Tab | What it shows |
 |-----|--------------|
-| **Dashboard** | Usage summary, recent bills, and active alerts |
-| **Usage** | Daily usage chart, monthly breakdown, cost estimates |
+| **Dashboard** | Usage summary, recent bills, active alerts, and neighborhood comparison by zip code |
+| **Usage** | Daily usage chart, monthly breakdown, and cost estimates |
 | **Bills** | All past bills — click any row to expand full invoice details |
-| **Forecasts** | Generate a 12-month ML usage prediction |
+| **Forecasts** | Generate a 12-month ML usage and cost prediction |
 
 ### For Admins (in addition to the above)
 
 | Tab | What it shows |
 |-----|--------------|
-| **Admin** | User management, data import, bill generation, anomaly detection, zip code rates |
+| **Admin** | User management, data import, bill generation, anomaly detection, zip code rates, and water shutoff management |
 | **Alerts** | All anomaly alerts across all customers, sorted by date |
+
+### HydroBot (all users)
+
+A floating chat assistant is available on every page. Click the chat icon in the bottom-right corner to ask questions about your usage, bills, forecasts, or account status. Admins can also query system-wide stats and look up customer accounts.
 
 ---
 
