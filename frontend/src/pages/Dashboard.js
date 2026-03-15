@@ -70,13 +70,21 @@ function Dashboard() {
     }
   };
 
-  if (loading) return <div className="text-center py-10">Loading...</div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="hydro-spinner" />
+      <p className="text-sm text-gray-400 font-medium">Loading your dashboard…</p>
+    </div>
+  );
 
   // Admin Dashboard
   if (user?.role === 'admin' || user?.role === 'billing') {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Admin Dashboard</h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Admin Dashboard</h1>
+          <p className="text-sm text-gray-400 mt-1">System overview and quick actions</p>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
@@ -160,7 +168,14 @@ function Dashboard() {
   const waterStatus = user?.customer?.water_status;
   return (
     <div>
-      <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Dashboard</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>
+          {user?.customer?.customer_name ? `Welcome, ${user.customer.customer_name.split(' ')[0]}` : 'Dashboard'}
+        </h1>
+        {user?.customer?.customer_type && (
+          <p className="text-sm text-gray-400 mt-1">{user.customer.customer_type} account</p>
+        )}
+      </div>
 
       {waterStatus === 'shutoff' && (
         <div className="mb-6 rounded-xl border-2 border-red-400 bg-red-50 p-5">

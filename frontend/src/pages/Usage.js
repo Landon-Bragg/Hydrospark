@@ -320,7 +320,12 @@ function Usage() {
   );
   const myMonthly = getMonthlyBreakdown(myUsage);
 
-  if (loading) return <div className="text-center py-10">Loading usage data...</div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="hydro-spinner" />
+      <p className="text-sm text-gray-400 font-medium">Loading usage data…</p>
+    </div>
+  );
 
   return (
     <div>

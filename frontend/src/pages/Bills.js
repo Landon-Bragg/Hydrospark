@@ -154,11 +154,19 @@ function Bills() {
     doc.save(`HydroSpark_Invoice_${name}_${period}.pdf`);
   };
 
-  if (loading) return <div className="text-center py-10">Loading bills...</div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="hydro-spinner" />
+      <p className="text-sm text-gray-400 font-medium">Loading bills…</p>
+    </div>
+  );
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6">Bills</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Bills</h1>
+        <p className="text-sm text-gray-400 mt-1">Your billing history and payment status</p>
+      </div>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">

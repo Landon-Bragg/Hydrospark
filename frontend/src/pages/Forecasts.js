@@ -182,7 +182,12 @@ function Forecasts() {
   const totalPredictedCost = forecasts.reduce((sum, f) => sum + parseFloat(f.predicted_amount), 0);
   const avgDailyUsage = forecasts.length > 0 ? totalPredictedUsage / forecasts.length : 0;
 
-  if (loading) return <div className="text-center py-10">Loading forecasts...</div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="hydro-spinner" />
+      <p className="text-sm text-gray-400 font-medium">Loading forecasts…</p>
+    </div>
+  );
 
   return (
     <div>

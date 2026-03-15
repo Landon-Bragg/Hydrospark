@@ -47,12 +47,20 @@ function Alerts() {
     return 'text-yellow-600';
   };
 
-  if (loading) return <div className="text-center py-10">Loading alerts...</div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="hydro-spinner" />
+      <p className="text-sm text-gray-400 font-medium">Loading alerts…</p>
+    </div>
+  );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-hydro-deep-aqua">Anomaly Alerts</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Anomaly Alerts</h1>
+          <p className="text-sm text-gray-400 mt-1">Usage spikes, leaks, and unusual patterns</p>
+        </div>
         
         <select 
           value={filter} 

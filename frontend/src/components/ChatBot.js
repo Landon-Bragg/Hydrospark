@@ -47,7 +47,15 @@ function ChatBot() {
     <>
       <button
         onClick={() => setOpen(o => !o)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-hydro-deep-aqua text-white shadow-lg flex items-center justify-center text-2xl hover:bg-hydro-spark-blue transition-colors"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full text-white flex items-center justify-center text-xl transition-all duration-200"
+        style={{
+          background: open
+            ? 'linear-gradient(135deg, #0A4C78 0%, #062d47 100%)'
+            : 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)',
+          boxShadow: open
+            ? '0 4px 20px rgba(10, 76, 120, 0.45)'
+            : '0 4px 24px rgba(30, 167, 214, 0.50), 0 0 0 1px rgba(30, 167, 214, 0.20)',
+        }}
         title="HydroBot"
       >
         {open ? '✕' : '💧'}
@@ -58,7 +66,7 @@ function ChatBot() {
           className="fixed bottom-24 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
           style={{ height: '420px' }}
         >
-          <div className="bg-hydro-deep-aqua text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0">
+          <div className="text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)' }}>
             <span className="text-lg">💧</span>
             <div>
               <p className="font-bold text-sm">HydroBot</p>
@@ -72,9 +80,10 @@ function ChatBot() {
                 <div
                   className={`max-w-xs px-3 py-2 rounded-xl text-sm leading-snug ${
                     m.role === 'user'
-                      ? 'bg-hydro-deep-aqua text-white rounded-br-sm'
+                      ? 'text-white rounded-br-sm'
                       : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                   }`}
+                  style={m.role === 'user' ? { background: 'linear-gradient(135deg, #1EA7D6, #0A4C78)' } : {}}
                 >
                   {m.content}
                 </div>
@@ -102,7 +111,8 @@ function ChatBot() {
             <button
               onClick={send}
               disabled={loading || !input.trim()}
-              className="bg-hydro-deep-aqua text-white px-3 py-2 rounded-lg text-sm hover:bg-hydro-spark-blue disabled:opacity-40 transition-colors"
+              className="text-white px-3 py-2 rounded-lg text-sm disabled:opacity-40 transition-all"
+              style={{ background: 'linear-gradient(135deg, #1EA7D6, #0A4C78)' }}
             >
               &#8594;
             </button>
