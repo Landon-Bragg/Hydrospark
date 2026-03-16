@@ -93,7 +93,6 @@ ADMIN_TOOLS = [
     },
 ]
 
-
 def execute_tool(name, inputs, user, customer):
     if name == "get_usage_summary":
         if not customer:
