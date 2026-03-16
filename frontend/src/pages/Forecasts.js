@@ -348,7 +348,7 @@ function Forecasts() {
           <p className="text-gray-500 mb-6">
             {isAdmin
               ? 'Generate a 12-month system-wide forecast using aggregated real usage from all customers'
-              : 'Generate a 12-month forecast using our ML model'}
+              : 'Generate a 12-month forecast. New customers are estimated from regional neighbors and local weather — no prior usage needed.'}
           </p>
           <button onClick={handleGenerateForecast} className="btn-primary">
             Generate Forecast
@@ -442,22 +442,45 @@ function Forecasts() {
           <div className="card mt-6 bg-blue-50">
             <div className="flex items-start">
               <div className="text-3xl mr-4">ℹ️</div>
-              <div>
+              <div className="flex-1">
                 <h3 className="font-semibold text-hydro-deep-aqua mb-2">About This Forecast</h3>
-                <p className="text-sm text-gray-700 mb-2">
-                  {isAdmin
-                    ? 'This forecast aggregates real daily usage across all customers, summed by date, then applies a weighted moving average to project total system demand.'
-                    : 'This forecast uses a weighted moving average algorithm that analyzes your historical usage patterns to predict future consumption.'}
-                </p>
-                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                  <li>Recent usage trends (last 30 days weighted 50%)</li>
-                  <li>Medium-term trends (last 90 days weighted 30%)</li>
-                  <li>Long-term average (last year weighted 20%)</li>
-                  <li>Seasonal variation applied via sine-wave adjustment</li>
-                </ul>
-                <p className="text-xs text-gray-600 mt-3">
-                  Model version: {forecasts[0]?.model_version || 'N/A'}
-                </p>
+                {(() => {
+                  const mv = forecasts[0]?.model_version || '';
+                  const isZipBaseline = mv === 'zip_baseline_weather_v1';
+                  const isSystem = mv.startsWith('system_');
+                  return (
+                    <>
+                      {isZipBaseline && (
+                        <div className="mb-3 px-3 py-2 rounded-lg text-sm font-medium"
+                          style={{ background: 'rgba(30,167,214,0.10)', border: '1px solid rgba(30,167,214,0.22)', color: '#0A4C78' }}>
+                          New account — this forecast uses average usage from customers in your zip code with a similar account type as your starting point. It will personalise once 30+ days of your own usage are recorded.
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-700 mb-2">
+                        {isSystem
+                          ? 'Aggregates real daily usage across all customers, applies a weighted moving average, then blends in seasonal climate norms to project system-wide demand.'
+                          : isZipBaseline
+                            ? 'Regional peer data provides the daily baseline, then seasonal climate patterns and live weather data shape the curve month by month.'
+                            : 'Your personal usage history drives this forecast via a weighted moving average, refined by monthly climate patterns and live 14-day weather data for your area.'}
+                      </p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                        {!isZipBaseline && !isSystem && <li>Recent usage (last 30 days) — 50% weight</li>}
+                        {!isZipBaseline && !isSystem && <li>Medium-term trends (last 90 days) — 30% weight</li>}
+                        {!isZipBaseline && !isSystem && <li>Long-term average (last year) — 20% weight</li>}
+                        {isZipBaseline && <li>Baseline from same-zip, same account-type neighbors</li>}
+                        <li>Monthly seasonal multipliers derived from US water utility climate norms</li>
+                        <li>
+                          {isSystem
+                            ? 'Seasonal norms blended across Residential, Commercial, and Municipal types'
+                            : 'Live 14-day Open-Meteo weather applied to near-term days (±12% nudge)'}
+                        </li>
+                      </ul>
+                      <p className="text-xs text-gray-400 mt-3">
+                        Model: <span className="font-medium text-gray-500">{mv || 'N/A'}</span>
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
