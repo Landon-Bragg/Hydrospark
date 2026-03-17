@@ -2,10 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including Tesseract OCR
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libtesseract-dev \
     gcc \
     g++ \
     default-libmysqlclient-dev \
