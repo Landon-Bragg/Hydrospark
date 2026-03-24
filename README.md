@@ -63,25 +63,49 @@ Then open your browser to: **http://localhost:3000**
 
 ## Signing In
 
-### Admin Account
+There are three roles, each with a different login and set of features:
+
+---
+
+### Admin
 
 ```
 Email:    admin@hydrospark.com
 Password: admin123
 ```
 
-The admin account has access to all features: user management, data import, bill generation, anomaly detection, and system-wide analytics.
+Full system access — user management, data import, bill generation, anomaly detection, zip analytics, water shutoff, and everything in the Billing/Support role.
 
-### Sample Customer Accounts
+**Navigation:** Dashboard · Usage · Forecasts · Bills · Alerts · Inbox · Admin
 
-All sample customers use the password: `welcome123`
+---
 
-| Email | Customer Name |
-|-------|--------------|
-| `customer_958213684@hydrospark.com` | Ava Walker |
-| `customer_772641217@hydrospark.com` | Benjamin White |
-| `customer_186640798@hydrospark.com` | City of Dallas Public Works |
-| `customer_833244776@hydrospark.com` | Taylor Davis |
+### Billing / Support
+
+```
+Email:    billing@hydrospark.com
+Password: billing123
+```
+
+Support-focused access — view and manage all customer bills and usage data, message customers directly through the inbox, and send notifications to individual customers or broadcast alerts to all customers.
+
+**Navigation:** Inbox · Usage · Bills
+
+---
+
+### Customer
+
+```
+Email:    customer_958213684@hydrospark.com   (Ava Walker)
+Email:    customer_772641217@hydrospark.com   (Benjamin White)
+Email:    customer_186640798@hydrospark.com   (City of Dallas Public Works)
+Email:    customer_833244776@hydrospark.com   (Taylor Davis)
+Password: welcome123  (all sample accounts)
+```
+
+Customer-facing view — personal usage history, forecasts, bills, and an inbox for notifications and direct messages from the support team.
+
+**Navigation:** Dashboard · Inbox · Usage · Forecasts · Bills
 
 ---
 
