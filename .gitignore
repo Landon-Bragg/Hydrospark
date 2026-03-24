@@ -19,7 +19,8 @@ yarn-error.log*
 build/
 .DS_Store
 
-
+PROJECT_SUMMARY.md
+QUICKSTART.md
 
 # Uploads
 uploads/
