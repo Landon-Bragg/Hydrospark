@@ -44,7 +44,10 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('GMAIL_USER', 'conbenlan@gmail.com
 
 # Initialize extensions
 CORS(app, resources={r"/api/*": {
-    "origins": ["http://localhost:3000"],
+    "origins": [
+        "http://localhost:3000",
+        "https://exciting-abundance-production.up.railway.app"
+    ],
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
@@ -122,7 +125,7 @@ def index():
             'billing': '/api/billing',
             'forecasts': '/api/forecasts',
             'alerts': '/api/alerts',
-'admin': '/api/admin'
+            'admin': '/api/admin'
         }
     })
 
@@ -137,4 +140,5 @@ def internal_error(error):
 if __name__ == '__main__':
     from seed import run_auto_seed
     run_auto_seed(app)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)

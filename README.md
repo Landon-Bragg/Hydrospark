@@ -4,6 +4,12 @@ A water utility management platform with usage tracking, ML-based forecasting, a
 
 ---
 
+
+## Live Deployment 
+**Frontend:** https://exciting-abundance-production.up.railway.app
+
+**Backend API:** https://hydrospark-py-production.up.railway.app/api/health
+
 ## Prerequisites
 
 You only need two things installed:
