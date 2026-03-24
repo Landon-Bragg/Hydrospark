@@ -9,7 +9,7 @@ from flask_mail import Mail
 from dotenv import load_dotenv
 import os
 import secrets
-from database import init_db
+from database import init_db, db
 from flask import request
 # Load environment variables
 load_dotenv()
@@ -80,6 +80,32 @@ def log_request_info():
 # Initialize database
 init_db(app)
 
+# Create any missing tables (safe on existing data)
+with app.app_context():
+    db.create_all()
+
+# Seed default users if they don't exist
+def seed_default_users():
+    from database import User
+    import bcrypt
+    if not User.query.filter_by(email='billing@hydrospark.com').first():
+        pw_hash = bcrypt.hashpw(b'billing123', bcrypt.gensalt(12)).decode()
+        billing_user = User(
+            email='billing@hydrospark.com',
+            password_hash=pw_hash,
+            role='billing',
+            first_name='Billing',
+            last_name='Support',
+            is_active=True,
+            is_approved=True,
+        )
+        db.session.add(billing_user)
+        db.session.commit()
+        print('Created default billing user: billing@hydrospark.com / billing123')
+
+with app.app_context():
+    seed_default_users()
+
 
 
 # Import and register blueprints
@@ -92,6 +118,7 @@ from routes.alerts import alerts_bp
 from routes.admin import admin_bp
 from routes.weather import weather_bp
 from routes.chat import chat_bp
+from routes.support import support_bp
 
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(customers_bp, url_prefix='/api/customers')
@@ -102,6 +129,7 @@ app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(weather_bp, url_prefix='/api/weather')
 app.register_blueprint(chat_bp, url_prefix='/api/chat')
+app.register_blueprint(support_bp, url_prefix='/api/support')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
