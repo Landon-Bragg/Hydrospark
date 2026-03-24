@@ -36,7 +36,9 @@ cd hydrospark-system
 cp .env.example .env
 ```
 
-The `.env` file comes pre-configured and works out of the box — no edits needed.
+The app works out of the box with the default config. To enable the AI chatbot (HydroBot), add your free Groq API key to `.env`:
+- Get one at https://console.groq.com
+- Set `GROQ_API_KEY=your-key-here` in `.env`
 
 ### 3. Start the application
 
