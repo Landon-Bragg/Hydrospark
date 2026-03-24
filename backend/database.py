@@ -299,6 +299,60 @@ class ZipCodeRate(db.Model):
         }
 
 
+# Support Message Model (billing/admin ↔ customer threads)
+class SupportMessage(db.Model):
+    __tablename__ = 'support_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    sender_role = db.Column(db.Enum('admin', 'billing', 'customer'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    read_by_staff = db.Column(db.Boolean, default=False)
+    read_by_customer = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        sender = User.query.get(self.sender_id)
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'sender_id': self.sender_id,
+            'sender_role': self.sender_role,
+            'sender_name': f"{sender.first_name or ''} {sender.last_name or ''}".strip() if sender else 'Unknown',
+            'content': self.content,
+            'read_by_staff': self.read_by_staff,
+            'read_by_customer': self.read_by_customer,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# Notification Model (staff → customer alerts)
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        creator = User.query.get(self.created_by)
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'created_by': self.created_by,
+            'created_by_name': f"{creator.first_name or ''} {creator.last_name or ''}".strip() if creator else 'Staff',
+            'title': self.title,
+            'message': self.message,
+            'is_read': self.is_read,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # Audit Log Model
 class AuditLog(db.Model):
     __tablename__ = 'audit_log'

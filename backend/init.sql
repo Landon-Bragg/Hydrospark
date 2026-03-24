@@ -164,6 +164,35 @@ CREATE TABLE IF NOT EXISTS meter_readings (
     INDEX idx_customer_date (customer_id, reading_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Support messages (billing/admin ↔ customer threads)
+CREATE TABLE IF NOT EXISTS support_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    sender_id INT NOT NULL,
+    sender_role ENUM('admin', 'billing', 'customer') NOT NULL,
+    content TEXT NOT NULL,
+    read_by_staff BOOLEAN DEFAULT FALSE,
+    read_by_customer BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_customer_created (customer_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Notifications (staff → customer alerts)
+CREATE TABLE IF NOT EXISTS notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    created_by INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_read (user_id, is_read)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Audit log for important actions
 CREATE TABLE IF NOT EXISTS audit_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -182,6 +211,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
 -- Insert default admin user (password: admin123)
 INSERT INTO users (email, password_hash, role, first_name, last_name, is_active, is_approved)
 VALUES ('admin@hydrospark.com', '$2b$12$K5iz3cTJHQFYQqP7VuGVMeZLmH7K7j8Z8f5VqB6LxR6IvJ8F1vD.e', 'admin', 'Admin', 'User', TRUE, TRUE);
+
+-- Insert default billing/support user (password: billing123, hash set by app startup)
+INSERT INTO users (email, password_hash, role, first_name, last_name, is_active, is_approved)
+VALUES ('billing@hydrospark.com', 'placeholder', 'billing', 'Billing', 'Support', TRUE, TRUE);
 
 -- Insert default billing rates
 INSERT INTO billing_rates (customer_type, rate_type, flat_rate, effective_date, is_active)

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ChatBot from './ChatBot';
+import { getUnreadCount } from '../services/api';
 
 const WaterDropIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -18,30 +19,55 @@ const WaterDropIcon = () => (
   </svg>
 );
 
-const NAV_LINKS = [
+const CUSTOMER_LINKS = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/inbox',     label: 'Inbox', badge: true },
   { to: '/usage',     label: 'Usage' },
   { to: '/forecasts', label: 'Forecasts' },
   { to: '/bills',     label: 'Bills' },
 ];
 
+const BILLING_LINKS = [
+  { to: '/inbox',  label: 'Inbox', accent: true },
+  { to: '/usage',  label: 'Usage' },
+  { to: '/bills',  label: 'Bills' },
+];
+
 const ADMIN_LINKS = [
-  { to: '/alerts', label: 'Alerts' },
-  { to: '/admin',  label: 'Admin', accent: true },
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/usage',     label: 'Usage' },
+  { to: '/forecasts', label: 'Forecasts' },
+  { to: '/bills',     label: 'Bills' },
+  { to: '/alerts',    label: 'Alerts' },
+  { to: '/inbox',     label: 'Inbox' },
+  { to: '/admin',     label: 'Admin', accent: true },
 ];
 
 function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'customer') {
+      getUnreadCount().then(r => setUnreadCount(r.data.count || 0)).catch(() => {});
+      const interval = setInterval(() => {
+        getUnreadCount().then(r => setUnreadCount(r.data.count || 0)).catch(() => {});
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.role]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'billing';
-  const links = [...NAV_LINKS, ...(isAdmin ? ADMIN_LINKS : [])];
+  let links;
+  if (user?.role === 'billing') links = BILLING_LINKS;
+  else if (user?.role === 'admin') links = ADMIN_LINKS;
+  else links = CUSTOMER_LINKS;
 
   return (
     <div className="min-h-screen">
@@ -65,7 +91,7 @@ function Layout() {
               </Link>
 
               <div className="hidden md:flex items-center gap-0.5">
-                {links.map(({ to, label, accent }) => {
+                {links.map(({ to, label, accent, badge }) => {
                   const isActive = location.pathname === to;
                   if (accent) {
                     return (
@@ -87,7 +113,7 @@ function Layout() {
                     <Link
                       key={to}
                       to={to}
-                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150"
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5"
                       style={{
                         background: isActive ? 'rgba(255,255,255,0.14)' : 'transparent',
                         color: isActive ? '#ffffff' : 'rgba(255,255,255,0.62)',
@@ -107,6 +133,12 @@ function Layout() {
                       }}
                     >
                       {label}
+                      {badge && unreadCount > 0 && (
+                        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ background: '#ef4444', color: '#fff', lineHeight: 1 }}>
+                          {unreadCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

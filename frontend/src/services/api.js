@@ -68,4 +68,15 @@ export const importData = (formData) => api.post('/admin/import/usage', formData
 // Chat
 export const sendChat = (message, history) => api.post('/chat/message', { message, history });
 
+// Support / Inbox
+export const getSupportThreads = () => api.get('/support/threads');
+export const getThreadMessages = (customerId) => api.get(`/support/threads/${customerId}/messages`);
+export const sendToCustomer = (customerId, content) => api.post(`/support/threads/${customerId}/messages`, { content });
+export const getMyMessages = () => api.get('/support/messages');
+export const sendMyMessage = (content) => api.post('/support/messages', { content });
+export const sendNotification = (data) => api.post('/support/notifications', data);
+export const getNotifications = () => api.get('/support/notifications');
+export const markNotificationRead = (id) => api.patch(`/support/notifications/${id}/read`);
+export const getUnreadCount = () => api.get('/support/notifications/unread-count');
+
 export default api;
