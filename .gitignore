@@ -19,8 +19,7 @@ yarn-error.log*
 build/
 .DS_Store
 
-# Database
-mysql_data/
+
 
 # Uploads
 uploads/
