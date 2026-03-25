@@ -158,6 +158,7 @@ function Forecasts() {
         intersect: false,
         callbacks: {
           label: function(context) {
+            if (!isAdmin) return null; // hide exact values for customers
             let label = context.dataset.label || '';
             if (label) label += ': ';
             label += context.parsed.y.toFixed(2) + ' CCF';
@@ -169,7 +170,9 @@ function Forecasts() {
     scales: {
       y: {
         beginAtZero: true,
-        title: { display: true, text: 'Water Usage (CCF)', font: { size: 14, weight: 'bold' } }
+        title: { display: true, text: isAdmin ? 'Water Usage (CCF)' : 'Usage Trend', font: { size: 14, weight: 'bold' } },
+        ticks: isAdmin ? {} : { display: false },
+        grid: isAdmin ? {} : { display: false },
       },
       x: {
         title: { display: true, text: 'Date', font: { size: 14, weight: 'bold' } }
@@ -181,6 +184,40 @@ function Forecasts() {
   const totalPredictedUsage = forecasts.reduce((sum, f) => sum + parseFloat(f.predicted_usage_ccf), 0);
   const totalPredictedCost = forecasts.reduce((sum, f) => sum + parseFloat(f.predicted_amount), 0);
   const avgDailyUsage = forecasts.length > 0 ? totalPredictedUsage / forecasts.length : 0;
+
+  // Group forecasts into calendar months for customer qualitative view
+  const forecastsByMonth = React.useMemo(() => {
+    const map = {};
+    forecasts.forEach(f => {
+      const d = new Date(f.forecast_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!map[key]) map[key] = { key, label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), days: [] };
+      map[key].days.push(f);
+    });
+    return Object.values(map).map(m => ({
+      ...m,
+      totalCcf: m.days.reduce((s, f) => s + parseFloat(f.predicted_usage_ccf), 0),
+      totalAmt: m.days.reduce((s, f) => s + parseFloat(f.predicted_amount), 0),
+    }));
+  }, [forecasts]);
+
+  // Baseline = average monthly CCF across first 3 months (or all if fewer)
+  const baselineMonths = forecastsByMonth.slice(0, 3);
+  const baselineCcf = baselineMonths.length
+    ? baselineMonths.reduce((s, m) => s + m.totalCcf, 0) / baselineMonths.length
+    : 0;
+
+  const getTrend = (ccf) => {
+    if (!baselineCcf) return null;
+    const pct = ((ccf - baselineCcf) / baselineCcf) * 100;
+    if (pct <= -20) return { label: 'Much Lower',    arrow: '↓↓', bg: '#f0fdf4', border: '#86efac', color: '#166534' };
+    if (pct <= -5)  return { label: 'Lower',         arrow: '↓',  bg: '#f0fdf4', border: '#86efac', color: '#15803d' };
+    if (pct <   5)  return { label: 'About the Same',arrow: '→',  bg: '#f8fafc', border: '#cbd5e1', color: '#475569' };
+    if (pct <  20)  return { label: 'Higher',        arrow: '↑',  bg: '#fffbeb', border: '#fcd34d', color: '#92400e' };
+    return               { label: 'Much Higher',     arrow: '↑↑', bg: '#fef2f2', border: '#fca5a5', color: '#991b1b' };
+  };
+
+  const nextMonthTrend = forecastsByMonth.length ? getTrend(forecastsByMonth[0].totalCcf) : null;
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">

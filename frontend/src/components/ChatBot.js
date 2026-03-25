@@ -1,33 +1,54 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChat } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-const WELCOME = 'Hi! Ask me about your water usage, bills, forecasts, or alerts.';
+const WELCOME = "Hi! I'm HydroBot. I can answer questions about your water usage, bills, forecasts, and account. Try one of the suggestions below or type your own question.";
+
+const CUSTOMER_SUGGESTIONS = [
+  "What's my current balance?",
+  "Show my last 3 months of usage",
+  "Do I have any active alerts?",
+  "What's my forecasted usage?",
+  "How is my bill calculated?",
+  "What does CCF mean?",
+];
+
+const ADMIN_SUGGESTIONS = [
+  "Show system overview",
+  "Which accounts are delinquent?",
+  "What are the current billing rates?",
+  "What triggers an anomaly alert?",
+  "What does a pending shutoff mean?",
+];
 
 function ChatBot() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([{ role: 'assistant', content: WELCOME }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
+  const suggestions = user?.role === 'customer' ? CUSTOMER_SUGGESTIONS : ADMIN_SUGGESTIONS;
+  const hasUserMessages = messages.some(m => m.role === 'user');
+
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  const send = async (text) => {
+    const trimmed = (text || input).trim();
+    if (!trimmed || loading) return;
 
-    const newMessages = [...messages, { role: 'user', content: text }];
+    const newMessages = [...messages, { role: 'user', content: trimmed }];
     setMessages(newMessages);
     setInput('');
     setLoading(true);
 
-    // Pass history excluding the initial welcome message
     const history = newMessages.slice(1, -1);
 
     try {
-      const res = await sendChat(text, history);
+      const res = await sendChat(trimmed, history);
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.response }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm unavailable right now." }]);
@@ -64,16 +85,19 @@ function ChatBot() {
       {open && (
         <div
           className="fixed bottom-24 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
-          style={{ height: '420px' }}
+          style={{ height: '460px' }}
         >
-          <div className="text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)' }}>
+          {/* Header */}
+          <div className="text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)' }}>
             <span className="text-lg">💧</span>
             <div>
               <p className="font-bold text-sm">HydroBot</p>
-              <p className="text-xs opacity-75">Ask about usage, bills &amp; more</p>
+              <p className="text-xs opacity-75">Water billing assistant</p>
             </div>
           </div>
 
+          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -89,6 +113,36 @@ function ChatBot() {
                 </div>
               </div>
             ))}
+
+            {/* Suggestion chips — only before first user message */}
+            {!hasUserMessages && (
+              <div className="pt-1 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => send(s)}
+                    disabled={loading}
+                    className="text-xs px-2.5 py-1.5 rounded-full border transition-all disabled:opacity-40"
+                    style={{
+                      borderColor: 'rgba(30,167,214,0.35)',
+                      color: '#0A4C78',
+                      background: 'rgba(30,167,214,0.06)',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(30,167,214,0.14)';
+                      e.currentTarget.style.borderColor = 'rgba(30,167,214,0.6)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(30,167,214,0.06)';
+                      e.currentTarget.style.borderColor = 'rgba(30,167,214,0.35)';
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loading && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 text-gray-400 px-3 py-2 rounded-xl rounded-bl-sm text-sm">
@@ -99,6 +153,7 @@ function ChatBot() {
             <div ref={bottomRef} />
           </div>
 
+          {/* Input */}
           <div className="px-3 py-2 border-t border-gray-200 flex gap-2 flex-shrink-0">
             <input
               value={input}
@@ -109,7 +164,7 @@ function ChatBot() {
               disabled={loading}
             />
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={loading || !input.trim()}
               className="text-white px-3 py-2 rounded-lg text-sm disabled:opacity-40 transition-all"
               style={{ background: 'linear-gradient(135deg, #1EA7D6, #0A4C78)' }}
