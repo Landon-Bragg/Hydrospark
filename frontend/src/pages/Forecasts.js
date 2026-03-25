@@ -393,34 +393,48 @@ function Forecasts() {
         </div>
       ) : forecasts.length > 0 ? (
         <div>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
-              <p className="text-sm mb-1 opacity-90">Total Predicted Usage</p>
-              <p className="text-3xl font-bold">{totalPredictedUsage.toFixed(0)} CCF</p>
-              <p className="text-xs mt-1 opacity-75">
-                {isAdmin ? 'All customers · Next 12 months' : 'Next 12 months'}
-              </p>
+          {/* Summary Cards — exact for admin, qualitative for customers */}
+          {isAdmin ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
+                <p className="text-sm mb-1 opacity-90">Total Predicted Usage</p>
+                <p className="text-3xl font-bold">{totalPredictedUsage.toFixed(0)} CCF</p>
+                <p className="text-xs mt-1 opacity-75">All customers · Next 12 months</p>
+              </div>
+              <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
+                <p className="text-sm mb-1 opacity-90">Average Daily</p>
+                <p className="text-3xl font-bold">{avgDailyUsage.toFixed(2)} CCF</p>
+                <p className="text-xs mt-1 opacity-75">System-wide per day</p>
+              </div>
+              <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                <p className="text-sm mb-1 opacity-90">Total Estimated Revenue</p>
+                <p className="text-3xl font-bold">
+                  ${totalPredictedCost.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+                <p className="text-xs mt-1 opacity-75">At default rate · Next 12 months</p>
+              </div>
             </div>
-            <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
-              <p className="text-sm mb-1 opacity-90">Average Daily</p>
-              <p className="text-3xl font-bold">{avgDailyUsage.toFixed(2)} CCF</p>
-              <p className="text-xs mt-1 opacity-75">
-                {isAdmin ? 'System-wide per day' : 'Per day forecast'}
-              </p>
+          ) : nextMonthTrend && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="card" style={{ borderLeft: `4px solid ${nextMonthTrend.border}`, background: nextMonthTrend.bg }}>
+                <p className="text-sm font-medium text-gray-500 mb-1">Next Month's Bill</p>
+                <p className="text-3xl font-bold" style={{ color: nextMonthTrend.color }}>
+                  {nextMonthTrend.arrow} {nextMonthTrend.label}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Compared to your recent average</p>
+              </div>
+              <div className="card bg-gray-50">
+                <p className="text-sm font-medium text-gray-500 mb-1">12-Month Outlook</p>
+                <p className="text-base font-semibold text-gray-700 mt-1">
+                  {forecastsByMonth.filter(m => getTrend(m.totalCcf)?.label === 'Much Higher' || getTrend(m.totalCcf)?.label === 'Higher').length} months above average
+                </p>
+                <p className="text-base font-semibold text-gray-700">
+                  {forecastsByMonth.filter(m => getTrend(m.totalCcf)?.label === 'Much Lower' || getTrend(m.totalCcf)?.label === 'Lower').length} months below average
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Based on seasonal patterns</p>
+              </div>
             </div>
-            <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-              <p className="text-sm mb-1 opacity-90">
-                {isAdmin ? 'Total Estimated Revenue' : 'Total Estimated Cost'}
-              </p>
-              <p className="text-3xl font-bold">
-                ${totalPredictedCost.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </p>
-              <p className="text-xs mt-1 opacity-75">
-                {isAdmin ? 'At default rate · Next 12 months' : 'Next 12 months'}
-              </p>
-            </div>
-          </div>
+          )}
 
           {/* Chart */}
           <div className="card mb-6">
@@ -429,50 +443,77 @@ function Forecasts() {
             </div>
           </div>
 
-          {/* Forecast Table */}
+          {/* Forecast Table — exact for admin, qualitative monthly for customers */}
           <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Detailed Forecast Data</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Predicted Usage</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      {isAdmin ? 'Est. Revenue' : 'Estimated Cost'}
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Confidence Range</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {forecasts.slice(0, 30).map((forecast, idx) => (
-                    <tr key={forecast.id || idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm">
-                        {new Date(forecast.forecast_date).toLocaleDateString('en-US', {
-                          year: 'numeric', month: 'short', day: 'numeric'
-                        })}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-hydro-deep-aqua">
-                        {parseFloat(forecast.predicted_usage_ccf).toFixed(2)} CCF
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-green-600">
-                        ${parseFloat(forecast.predicted_amount).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {forecast.confidence_lower && forecast.confidence_upper ? (
-                          `${parseFloat(forecast.confidence_lower).toFixed(2)} – ${parseFloat(forecast.confidence_upper).toFixed(2)} CCF`
-                        ) : 'N/A'}
-                      </td>
+            <h2 className="text-xl font-semibold mb-4">
+              {isAdmin ? 'Detailed Forecast Data' : 'Monthly Outlook'}
+            </h2>
+            {isAdmin ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Predicted Usage</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Est. Revenue</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Confidence Range</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {forecasts.length > 30 && (
-                <p className="text-sm text-gray-500 mt-4 text-center">
-                  Showing first 30 of {forecasts.length} days
-                </p>
-              )}
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {forecasts.slice(0, 30).map((forecast, idx) => (
+                      <tr key={forecast.id || idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">
+                          {new Date(forecast.forecast_date).toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                          })}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-hydro-deep-aqua">
+                          {parseFloat(forecast.predicted_usage_ccf).toFixed(2)} CCF
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                          ${parseFloat(forecast.predicted_amount).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {forecast.confidence_lower && forecast.confidence_upper
+                            ? `${parseFloat(forecast.confidence_lower).toFixed(2)} – ${parseFloat(forecast.confidence_upper).toFixed(2)} CCF`
+                            : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {forecasts.length > 30 && (
+                  <p className="text-sm text-gray-500 mt-4 text-center">
+                    Showing first 30 of {forecasts.length} days
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {forecastsByMonth.map((month, idx) => {
+                  const trend = getTrend(month.totalCcf);
+                  if (!trend) return null;
+                  return (
+                    <div key={month.key} className="flex items-center justify-between py-3 px-1">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700 w-36">{month.label}</span>
+                        {idx === 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                            Next month
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className="text-sm font-semibold px-3 py-1 rounded-full"
+                        style={{ background: trend.bg, color: trend.color, border: `1px solid ${trend.border}` }}
+                      >
+                        {trend.arrow} {trend.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Info Card */}
