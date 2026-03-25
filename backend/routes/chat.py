@@ -105,8 +105,8 @@ def execute_tool(name, inputs, user, customer):
                 func.sum(WaterUsage.daily_usage_ccf).label("total"),
             )
             .filter(WaterUsage.customer_id == customer.id)
-            .group_by("year", "month")
-            .order_by(desc("year"), desc("month"))
+            .group_by(func.year(WaterUsage.usage_date), func.month(WaterUsage.usage_date))
+            .order_by(desc(func.year(WaterUsage.usage_date)), desc(func.month(WaterUsage.usage_date)))
             .limit(months)
             .all()
         )
