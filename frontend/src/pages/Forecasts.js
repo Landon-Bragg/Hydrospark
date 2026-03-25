@@ -210,10 +210,10 @@ function Forecasts() {
   const getTrend = (ccf) => {
     if (!baselineCcf) return null;
     const pct = ((ccf - baselineCcf) / baselineCcf) * 100;
-    if (pct <= -20) return { label: 'Much Lower',    arrow: '↓↓', bg: '#f0fdf4', border: '#86efac', color: '#166534' };
+    if (pct <= -18) return { label: 'Much Lower',    arrow: '↓↓', bg: '#f0fdf4', border: '#86efac', color: '#166534' };
     if (pct <= -5)  return { label: 'Lower',         arrow: '↓',  bg: '#f0fdf4', border: '#86efac', color: '#15803d' };
     if (pct <   5)  return { label: 'About the Same',arrow: '→',  bg: '#f8fafc', border: '#cbd5e1', color: '#475569' };
-    if (pct <  20)  return { label: 'Higher',        arrow: '↑',  bg: '#fffbeb', border: '#fcd34d', color: '#92400e' };
+    if (pct <  18)  return { label: 'Higher',        arrow: '↑',  bg: '#fffbeb', border: '#fcd34d', color: '#92400e' };
     return               { label: 'Much Higher',     arrow: '↑↑', bg: '#fef2f2', border: '#fca5a5', color: '#991b1b' };
   };
 
