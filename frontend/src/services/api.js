@@ -64,6 +64,8 @@ export const restoreWater = (id) => api.post(`/admin/customers/${id}/restore`);
 export const importData = (formData) => api.post('/admin/import/usage', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
+export const detectAnomalies = () => api.post('/admin/detect', {});
+export const generateHistoricalBills = () => api.post('/admin/generate-historical-bills', {});
 
 // Chat
 export const sendChat = (message, history) => api.post('/chat/message', { message, history });

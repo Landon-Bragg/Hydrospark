@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater } from '../services/api';
-import axios from 'axios';
+import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater, detectAnomalies, generateHistoricalBills } from '../services/api';
 
 function AdminDashboard() {
   const [file, setFile] = useState(null);
@@ -208,18 +207,7 @@ function AdminDashboard() {
     setAnomalyResult(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'http://localhost:5001/api/admin/detect',
-        {},
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
+      const response = await detectAnomalies();
       setAnomalyResult(response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Anomaly detection failed');
@@ -234,18 +222,7 @@ function AdminDashboard() {
     setBillResult(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'http://localhost:5001/api/admin/generate-historical-bills',
-        {},
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
+      const response = await generateHistoricalBills();
       setBillResult(response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Bill generation failed');
