@@ -304,7 +304,7 @@ def chat_message():
 
             "BILLING FAQ (use this knowledge to answer common questions without calling tools):\n"
             "- Usage is measured in CCF (hundred cubic feet). 1 CCF ≈ 748 gallons.\n"
-            "- Billing rates: Residential $5.72/CCF, Municipal $3.00/CCF, Commercial $3.00/CCF. "
+            "- Billing rates: Residential $5.72/CCF, Municipal $5.72/CCF, Commercial $5.72/CCF. "
             "  Some accounts have a custom rate set by the utility.\n"
             "- Bills are generated monthly based on the billing cycle.\n"
             "- Payment is due 30 days after the bill is issued. Overdue bills have not been paid after the due date.\n"
