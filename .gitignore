@@ -32,6 +32,9 @@ uploads/
 ml_models/*.pkl
 ml_models/*.joblib
 
+# Claude Code
+CLAUDE.md
+
 # IDE
 .vscode/
 .idea/

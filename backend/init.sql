@@ -220,5 +220,5 @@ VALUES ('billing@hydrospark.com', 'placeholder', 'billing', 'Billing', 'Support'
 INSERT INTO billing_rates (customer_type, rate_type, flat_rate, effective_date, is_active)
 VALUES
     ('Residential', 'flat', 5.72, '2018-01-01', TRUE),
-    ('Municipal', 'flat', 3.00, '2018-01-01', TRUE),
-    ('Commercial', 'flat', 3.00, '2018-01-01', TRUE);
+    ('Municipal', 'flat', 5.72, '2018-01-01', TRUE),
+    ('Commercial', 'flat', 5.72, '2018-01-01', TRUE);
