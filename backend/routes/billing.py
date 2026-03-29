@@ -166,9 +166,50 @@ def admin_search_bills():
             d['customer_email'] = u.email
             d['customer_type'] = customer.customer_type
             d['location_id'] = customer.location_id
+            d['user_id'] = u.id
             bills.append(d)
 
         return jsonify({'bills': bills, 'total': total, 'page': page, 'per_page': per_page}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_billing_stats():
+    """Billing/admin: aggregate summary stats"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        from sqlalchemy import func
+        from datetime import date
+
+        first_of_month = date.today().replace(day=1)
+
+        outstanding = db.session.query(
+            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
+        ).filter(Bill.status.in_(['pending', 'sent'])).one()
+
+        overdue = db.session.query(
+            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
+        ).filter(Bill.status == 'overdue').one()
+
+        paid_month = db.session.query(
+            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
+        ).filter(
+            Bill.status == 'paid',
+            Bill.paid_at >= first_of_month
+        ).one()
+
+        return jsonify({
+            'outstanding': {'count': outstanding[0], 'total': float(outstanding[1])},
+            'overdue': {'count': overdue[0], 'total': float(overdue[1])},
+            'paid_this_month': {'count': paid_month[0], 'total': float(paid_month[1])},
+        }), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
