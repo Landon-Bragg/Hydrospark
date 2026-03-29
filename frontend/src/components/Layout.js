@@ -28,9 +28,9 @@ const CUSTOMER_LINKS = [
 ];
 
 const BILLING_LINKS = [
-  { to: '/inbox',  label: 'Inbox', accent: true },
-  { to: '/usage',  label: 'Usage' },
-  { to: '/bills',  label: 'Bills' },
+  { to: '/billing', label: 'Billing', accent: true },
+  { to: '/inbox',   label: 'Inbox' },
+  { to: '/usage',   label: 'Usage' },
 ];
 
 const ADMIN_LINKS = [

@@ -9,6 +9,7 @@ import Forecasts from './pages/Forecasts';
 import Bills from './pages/Bills';
 import Alerts from './pages/Alerts';
 import AdminDashboard from './pages/AdminDashboard';
+import BillingDashboard from './pages/BillingDashboard';
 import Inbox from './pages/Inbox';
 import AcceptInvite from './pages/AcceptInvite';
 import Layout from './components/Layout';
@@ -35,7 +36,7 @@ function PrivateRoute({ children, requiredRole }) {
 
 function DefaultRedirect() {
   const { user } = useAuth();
-  if (user?.role === 'billing') return <Navigate to="/inbox" replace />;
+  if (user?.role === 'billing') return <Navigate to="/billing" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -54,6 +55,7 @@ function App() {
             <Route path="usage" element={<Usage />} />
             <Route path="forecasts" element={<Forecasts />} />
             <Route path="bills" element={<Bills />} />
+            <Route path="billing" element={<BillingDashboard />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="alerts" element={<PrivateRoute requiredRole="admin"><Alerts /></PrivateRoute>} />
             <Route path="admin" element={<PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute>} />
