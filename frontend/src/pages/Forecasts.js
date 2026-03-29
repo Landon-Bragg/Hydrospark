@@ -271,8 +271,8 @@ function Forecasts() {
         </div>
       )}
 
-      {/* Weather Panel */}
-      <div className="card mb-6 border-2 border-hydro-sky-blue">
+      {/* Weather Panel — customers only */}
+      {!isAdmin && <div className="card mb-6 border-2 border-hydro-sky-blue">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -376,7 +376,7 @@ function Forecasts() {
             </p>
           </>
         )}
-      </div>
+      </div>}
 
       {forecasts.length === 0 && !generating ? (
         <div className="card text-center py-12">
