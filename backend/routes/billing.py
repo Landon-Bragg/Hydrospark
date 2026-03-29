@@ -174,6 +174,42 @@ def admin_search_bills():
         return jsonify({'error': str(e)}), 500
 
 
+@billing_bp.route('/bills/<int:bill_id>/pay', methods=['POST'])
+@jwt_required()
+def pay_bill(bill_id):
+    """Customer: pay their own bill"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if user.role != 'customer':
+            return jsonify({'error': 'Customers only'}), 403
+
+        if not user.customer:
+            return jsonify({'error': 'Customer profile not found'}), 404
+
+        bill = Bill.query.get(bill_id)
+        if not bill:
+            return jsonify({'error': 'Bill not found'}), 404
+
+        if bill.customer_id != user.customer.id:
+            return jsonify({'error': 'Access denied'}), 403
+
+        if bill.status == 'paid':
+            return jsonify({'error': 'Bill is already paid'}), 400
+
+        bill.status = 'paid'
+        bill.paid_at = datetime.utcnow()
+        bill.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'message': 'Payment successful', 'bill': bill.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @billing_bp.route('/bills/<int:bill_id>', methods=['PUT'])
 @jwt_required()
 def update_bill(bill_id):
