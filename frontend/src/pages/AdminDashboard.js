@@ -57,10 +57,6 @@ function AdminDashboard() {
   const [delinquentSearch, setDelinquentSearch] = useState('');
   const [shutoffWorking, setShutoffWorking] = useState(null);
 
-  // General water service search (searches all customers from charges)
-  const [waterSearch, setWaterSearch] = useState('');
-  const [waterSearchActive, setWaterSearchActive] = useState(false);
-
   useEffect(() => {
     setChargesLoading(true);
     setZipRatesLoading(true);
