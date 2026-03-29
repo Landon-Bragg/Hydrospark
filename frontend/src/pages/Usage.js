@@ -47,6 +47,7 @@ function UsageTooltip({ active, payload }) {
 function CustomerDetail({ customer, dateRange, onClear }) {
   const [usage, setUsage] = useState([]);
   const [loadingDetail, setLoadingDetail] = useState(true);
+  const [tierFilter, setTierFilter] = useState('all');
 
   useEffect(() => {
     setLoadingDetail(true);
@@ -172,6 +173,38 @@ function CustomerDetail({ customer, dateRange, onClear }) {
         <p className="text-gray-500 text-sm">No records found for this period.</p>
       ) : (
         <div className="overflow-x-auto">
+          {/* Tier filter buttons */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'normal', label: 'Normal', color: 'bg-sky-500' },
+              { key: 'above', label: 'Above Average', color: 'bg-amber-400' },
+              { key: 'high', label: '30%+ Above Average', color: 'bg-red-500' },
+            ].map(({ key, label, color }) => {
+              const count = key === 'all' ? usage.length : usage.filter(r => {
+                const val = parseFloat(r.daily_usage_ccf);
+                const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
+                if (key === 'normal') return diff <= 0;
+                if (key === 'above') return diff > 0 && diff <= 30;
+                if (key === 'high') return diff > 30;
+              }).length;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTierFilter(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition ${
+                    tierFilter === key
+                      ? 'bg-hydro-deep-aqua text-white border-hydro-deep-aqua'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  {color && <span className={`inline-block w-2 h-2 rounded-full ${color}`} />}
+                  {label}
+                  {key !== 'all' && <span className="opacity-75">({count})</span>}
+                </button>
+              );
+            })}
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -182,26 +215,44 @@ function CustomerDetail({ customer, dateRange, onClear }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {usage.slice(0, 100).map(r => {
-                const val = parseFloat(r.daily_usage_ccf);
-                const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-1.5">{r.usage_date}</td>
-                    <td className="px-4 py-1.5 font-semibold">{val.toFixed(2)}</td>
-                    <td className="px-4 py-1.5">
-                      <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                        {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-1.5">
-                      {r.is_estimated
-                        ? <span className="text-yellow-600 text-xs">Estimated</span>
-                        : <span className="text-green-600 text-xs">Actual</span>}
+              {(() => {
+                const filtered = usage.filter(r => {
+                  if (tierFilter === 'all') return true;
+                  const val = parseFloat(r.daily_usage_ccf);
+                  const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
+                  if (tierFilter === 'normal') return diff <= 0;
+                  if (tierFilter === 'above') return diff > 0 && diff <= 30;
+                  if (tierFilter === 'high') return diff > 30;
+                });
+                if (filtered.length === 0) return (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                      <p className="text-base font-medium">No results</p>
+                      <p className="text-xs mt-1">No records match the selected tier</p>
                     </td>
                   </tr>
                 );
-              })}
+                return filtered.slice(0, 100).map(r => {
+                  const val = parseFloat(r.daily_usage_ccf);
+                  const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-1.5">{r.usage_date}</td>
+                      <td className="px-4 py-1.5 font-semibold">{val.toFixed(2)}</td>
+                      <td className="px-4 py-1.5">
+                        <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                          {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-1.5">
+                        {r.is_estimated
+                          ? <span className="text-yellow-600 text-xs">Estimated</span>
+                          : <span className="text-green-600 text-xs">Actual</span>}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
           {usage.length > 100 && (
@@ -232,6 +283,7 @@ function Usage() {
   // Customer state
   const [myUsage, setMyUsage] = useState([]);
   const [mySummary, setMySummary] = useState(null);
+  const [myTierFilter, setMyTierFilter] = useState('all');
 
   useEffect(() => {
     if (isAdmin) {
@@ -548,6 +600,38 @@ function Usage() {
               <p className="text-gray-500">No usage data found for this period.</p>
             ) : (
               <div className="overflow-x-auto">
+                {/* Tier filter buttons */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { key: 'all', label: 'All' },
+                    { key: 'normal', label: 'Normal', color: 'bg-sky-500' },
+                    { key: 'above', label: 'Above Average', color: 'bg-amber-400' },
+                    { key: 'high', label: '30%+ Above Average', color: 'bg-red-500' },
+                  ].map(({ key, label, color }) => {
+                    const count = key === 'all' ? myUsage.length : myUsage.filter(r => {
+                      const val = parseFloat(r.daily_usage_ccf);
+                      const diff = myAvgDaily > 0 ? ((val - myAvgDaily) / myAvgDaily * 100) : 0;
+                      if (key === 'normal') return diff <= 0;
+                      if (key === 'above') return diff > 0 && diff <= 30;
+                      if (key === 'high') return diff > 30;
+                    }).length;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setMyTierFilter(key)}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition ${
+                          myTierFilter === key
+                            ? 'bg-hydro-deep-aqua text-white border-hydro-deep-aqua'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {color && <span className={`inline-block w-2 h-2 rounded-full ${color}`} />}
+                        {label}
+                        {key !== 'all' && <span className="opacity-75">({count})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -558,26 +642,44 @@ function Usage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {myUsage.slice(0, 100).map(record => {
-                      const val = parseFloat(record.daily_usage_ccf);
-                      const diff = myAvgDaily > 0 ? ((val - myAvgDaily) / myAvgDaily * 100) : 0;
-                      return (
-                        <tr key={record.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2">{record.usage_date}</td>
-                          <td className="px-4 py-2 font-semibold">{val.toFixed(2)}</td>
-                          <td className="px-4 py-2">
-                            <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                              {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
-                            </span>
-                          </td>
-                          <td className="px-4 py-2">
-                            {record.is_estimated
-                              ? <span className="text-yellow-600 text-xs">Estimated</span>
-                              : <span className="text-green-600 text-xs">Actual</span>}
+                    {(() => {
+                      const filtered = myUsage.filter(record => {
+                        if (myTierFilter === 'all') return true;
+                        const val = parseFloat(record.daily_usage_ccf);
+                        const diff = myAvgDaily > 0 ? ((val - myAvgDaily) / myAvgDaily * 100) : 0;
+                        if (myTierFilter === 'normal') return diff <= 0;
+                        if (myTierFilter === 'above') return diff > 0 && diff <= 30;
+                        if (myTierFilter === 'high') return diff > 30;
+                      });
+                      if (filtered.length === 0) return (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                            <p className="text-base font-medium">No results</p>
+                            <p className="text-xs mt-1">No records match the selected tier</p>
                           </td>
                         </tr>
                       );
-                    })}
+                      return filtered.slice(0, 100).map(record => {
+                        const val = parseFloat(record.daily_usage_ccf);
+                        const diff = myAvgDaily > 0 ? ((val - myAvgDaily) / myAvgDaily * 100) : 0;
+                        return (
+                          <tr key={record.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2">{record.usage_date}</td>
+                            <td className="px-4 py-2 font-semibold">{val.toFixed(2)}</td>
+                            <td className="px-4 py-2">
+                              <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                                {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-2">
+                              {record.is_estimated
+                                ? <span className="text-yellow-600 text-xs">Estimated</span>
+                                : <span className="text-green-600 text-xs">Actual</span>}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
                 {myUsage.length > 100 && (
