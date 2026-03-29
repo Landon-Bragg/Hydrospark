@@ -2,9 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges } from '../services/api';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, Cell
+  PieChart, Pie, Tooltip, ResponsiveContainer,
+  Cell, Legend, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid
 } from 'recharts';
+
+
 
 function getDateParams(days) {
   const end = new Date();
@@ -295,21 +298,38 @@ function Usage() {
     [topCustomers]
   );
 
-  const myDailyChart = useMemo(() => {
+  const myMonthlyPieData = useMemo(() => {
     if (!myUsage.length) return [];
-    const avg = myUsage.reduce((s, u) => s + parseFloat(u.daily_usage_ccf), 0) / myUsage.length;
-    const map = {};
+    // Group by month, compute per-month average, then bucket days into tiers
+    const monthMap = {};
     for (const u of myUsage) {
-      map[u.usage_date] = (map[u.usage_date] || 0) + parseFloat(u.daily_usage_ccf || 0);
+      const month = u.usage_date.slice(0, 7);
+      if (!monthMap[month]) monthMap[month] = [];
+      monthMap[month].push(parseFloat(u.daily_usage_ccf || 0));
     }
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, val]) => ({
-        date: date.slice(5),
-        fullDate: date,
-        usage: parseFloat(val.toFixed(2)),
-        color: val > avg * 1.3 ? '#ef4444' : val > avg ? '#f59e0b' : '#0ea5e9',
-      }));
+    // For each month, sum CCF into 3 tiers based on that month's average
+    const result = {};
+    for (const [month, days] of Object.entries(monthMap)) {
+      const monthAvg = days.reduce((s, v) => s + v, 0) / days.length;
+      result[month] = { normal: 0, above: 0, high: 0 };
+      for (const val of days) {
+        if (val > monthAvg * 1.3) result[month].high += val;
+        else if (val > monthAvg) result[month].above += val;
+        else result[month].normal += val;
+      }
+    }
+    // Aggregate across all months into 3 slices
+    let normal = 0, above = 0, high = 0;
+    for (const m of Object.values(result)) {
+      normal += m.normal;
+      above += m.above;
+      high += m.high;
+    }
+    return [
+      { name: 'Normal', value: parseFloat(normal.toFixed(2)), color: '#0ea5e9' },
+      { name: 'Above Average', value: parseFloat(above.toFixed(2)), color: '#f59e0b' },
+      { name: '30%+ Above Average', value: parseFloat(high.toFixed(2)), color: '#ef4444' },
+    ].filter(d => d.value > 0);
   }, [myUsage]);
 
   const myTotalUsage = myUsage.reduce((s, u) => s + parseFloat(u.daily_usage_ccf || 0), 0);
@@ -456,34 +476,37 @@ function Usage() {
             </div>
           </div>
 
-          {/* Daily usage chart */}
+          {/* Usage breakdown pie chart */}
           <div className="card mb-6">
-            <h2 className="text-xl font-semibold mb-4">Daily Usage</h2>
-            {myDailyChart.length === 0 ? (
+            <h2 className="text-xl font-semibold mb-1">Usage Breakdown</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Total CCF grouped by usage tier — based on each month's average
+            </p>
+            {myMonthlyPieData.length === 0 ? (
               <p className="text-gray-500">No data for this period.</p>
             ) : (
-              <>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={myDailyChart} margin={{ left: 0, right: 10, top: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10 }}
-                      interval={Math.max(0, Math.floor(myDailyChart.length / 12) - 1)}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} unit=" CCF" width={65} />
-                    <Tooltip content={<UsageTooltip />} />
-                    <Bar dataKey="usage" radius={[2, 2, 0, 0]}>
-                      {myDailyChart.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex gap-4 text-xs text-gray-500 mt-2">
-                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500 mr-1" />Normal</span>
-                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1" />Above average</span>
-                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1" />30%+ above average</span>
-                </div>
-              </>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={myMonthlyPieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                    labelLine={true}
+                  >
+                    {myMonthlyPieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value, name) => [`${value.toLocaleString()} CCF`, name]}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             )}
           </div>
 
