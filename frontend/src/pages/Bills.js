@@ -272,21 +272,23 @@ function Bills() {
                               {bill.status.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
-                            {bill.status !== 'paid' && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setPayConfirm(bill); }}
-                                className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
-                                style={{ background: '#0A4C78', color: '#fff' }}
-                                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                              >
-                                Pay Now
-                              </button>
-                            )}
-                            <span className="text-xs text-gray-400">
-                              {isExpanded ? '▲ Hide' : '▼ View'}
-                            </span>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              {bill.status !== 'paid' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setPayConfirm(bill); }}
+                                  className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
+                                  style={{ background: '#0A4C78', color: '#fff' }}
+                                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                >
+                                  Pay Now
+                                </button>
+                              )}
+                              <span className="text-xs text-gray-400">
+                                {isExpanded ? '▲ Hide' : '▼ View'}
+                              </span>
+                            </div>
                           </td>
                         </tr>
 
