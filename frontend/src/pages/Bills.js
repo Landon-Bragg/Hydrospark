@@ -10,6 +10,7 @@ function Bills() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedBill, setExpandedBill] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
     loadBills();
@@ -154,6 +155,8 @@ function Bills() {
     doc.save(`HydroSpark_Invoice_${name}_${period}.pdf`);
   };
 
+  const filteredBills = statusFilter === 'all' ? bills : bills.filter(b => b.status === statusFilter);
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <div className="hydro-spinner" />
@@ -214,6 +217,30 @@ function Bills() {
               </button>
             </div>
 
+            {/* Status filter buttons */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {['all', 'pending', 'sent', 'paid', 'overdue'].map(status => (
+                <button
+                  key={status}
+                  onClick={() => { setStatusFilter(status); setExpandedBill(null); }}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${
+                    statusFilter === status
+                      ? status === 'all' ? 'bg-hydro-deep-aqua text-white border-hydro-deep-aqua'
+                        : status === 'paid' ? 'bg-green-600 text-white border-green-600'
+                        : status === 'sent' ? 'bg-blue-600 text-white border-blue-600'
+                        : status === 'pending' ? 'bg-yellow-500 text-white border-yellow-500'
+                        : 'bg-red-600 text-white border-red-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status !== 'all' && (
+                    <span className="ml-1 opacity-75">({bills.filter(b => b.status === status).length})</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead className="bg-gray-50">
@@ -228,7 +255,14 @@ function Bills() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bills.map((bill) => {
+                  {filteredBills.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                        <p className="text-lg font-medium">No results</p>
+                        <p className="text-sm mt-1">No bills match the selected status</p>
+                      </td>
+                    </tr>
+                  ) : filteredBills.map((bill) => {
                     const usage = parseFloat(bill.total_usage_ccf);
                     const cost = parseFloat(bill.total_amount);
                     const rate = usage > 0 ? (cost / usage).toFixed(2) : '—';
