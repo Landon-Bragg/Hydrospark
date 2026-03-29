@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getBills, payBill } from '../services/api';
+import { getBills } from '../services/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +10,6 @@ function Bills() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedBill, setExpandedBill] = useState(null);
-  const [payConfirm, setPayConfirm] = useState(null); // bill object awaiting confirmation
-  const [paying, setPaying] = useState(false);
-  const [payError, setPayError] = useState(null);
 
   useEffect(() => {
     loadBills();
@@ -44,21 +41,6 @@ function Bills() {
     if (!dateStr) return '—';
     const d = new Date(dateStr + 'T00:00:00');
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  };
-
-  const handlePayBill = async () => {
-    if (!payConfirm) return;
-    setPaying(true);
-    setPayError(null);
-    try {
-      const res = await payBill(payConfirm.id);
-      setBills(prev => prev.map(b => b.id === payConfirm.id ? res.data.bill : b));
-      setPayConfirm(null);
-    } catch (err) {
-      setPayError(err.response?.data?.error || 'Payment failed');
-    } finally {
-      setPaying(false);
-    }
   };
 
   const handleDownloadAllStatements = () => {
@@ -272,23 +254,10 @@ function Bills() {
                               {bill.status.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-2">
-                              {bill.status !== 'paid' && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setPayConfirm(bill); }}
-                                  className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
-                                  style={{ background: '#0A4C78', color: '#fff' }}
-                                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                >
-                                  Pay Now
-                                </button>
-                              )}
-                              <span className="text-xs text-gray-400">
-                                {isExpanded ? '▲ Hide' : '▼ View'}
-                              </span>
-                            </div>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-xs text-gray-400">
+                              {isExpanded ? '▲ Hide' : '▼ View'}
+                            </span>
                           </td>
                         </tr>
 
@@ -363,18 +332,7 @@ function Bills() {
                                   </div>
 
                                   {/* Actions */}
-                                  <div className="flex justify-end gap-3 mt-4">
-                                    {bill.status !== 'paid' && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setPayConfirm(bill); }}
-                                        className="text-sm px-4 py-2 rounded font-semibold text-white transition"
-                                        style={{ background: '#0A4C78' }}
-                                        onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                      >
-                                        Pay Now
-                                      </button>
-                                    )}
+                                  <div className="flex justify-end mt-4">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDownloadSingleBill(bill); }}
                                       className="text-sm px-4 py-2 border border-hydro-deep-aqua text-hydro-deep-aqua rounded hover:bg-hydro-sky-blue transition"
@@ -397,61 +355,6 @@ function Bills() {
         </div>
       )}
 
-      {/* Pay confirmation modal */}
-      {payConfirm && (
-        <div
-          className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
-          onClick={() => { if (!paying) { setPayConfirm(null); setPayError(null); } }}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold text-hydro-deep-aqua mb-1">Confirm Payment</h3>
-            <p className="text-sm text-gray-500 mb-5">
-              {payConfirm.billing_period_start} to {payConfirm.billing_period_end}
-            </p>
-
-            <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
-              <div className="flex justify-between px-4 py-3 bg-gray-50">
-                <span className="text-sm text-gray-600">Amount Due</span>
-                <span className="text-lg font-bold text-hydro-deep-aqua">
-                  ${parseFloat(payConfirm.total_amount).toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between px-4 py-2.5">
-                <span className="text-sm text-gray-500">Due Date</span>
-                <span className="text-sm text-gray-700">{formatDate(payConfirm.due_date)}</span>
-              </div>
-            </div>
-
-            {payError && (
-              <p className="text-sm text-red-600 mb-3">{payError}</p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setPayConfirm(null); setPayError(null); }}
-                disabled={paying}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePayBill}
-                disabled={paying}
-                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
-                style={{ background: '#0A4C78' }}
-                onMouseEnter={e => { if (!paying) e.currentTarget.style.opacity = '0.85'; }}
-                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-              >
-                {paying ? 'Processing…' : 'Confirm Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -25,6 +25,7 @@ const CUSTOMER_LINKS = [
   { to: '/usage',     label: 'Usage' },
   { to: '/forecasts', label: 'Forecasts' },
   { to: '/bills',     label: 'Bills' },
+  { to: '/pay',       label: 'Pay Bills', accent: true },
 ];
 
 const BILLING_LINKS = [

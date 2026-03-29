@@ -10,6 +10,7 @@ import Bills from './pages/Bills';
 import Alerts from './pages/Alerts';
 import AdminDashboard from './pages/AdminDashboard';
 import BillingDashboard from './pages/BillingDashboard';
+import Pay from './pages/Pay';
 import Inbox from './pages/Inbox';
 import AcceptInvite from './pages/AcceptInvite';
 import Layout from './components/Layout';
@@ -56,6 +57,7 @@ function App() {
             <Route path="forecasts" element={<Forecasts />} />
             <Route path="bills" element={<Bills />} />
             <Route path="billing" element={<BillingDashboard />} />
+            <Route path="pay" element={<Pay />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="alerts" element={<PrivateRoute requiredRole="admin"><Alerts /></PrivateRoute>} />
             <Route path="admin" element={<PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute>} />
