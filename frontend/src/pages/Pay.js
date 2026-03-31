@@ -14,6 +14,9 @@ function Pay() {
   const [payConfirm, setPayConfirm] = useState(null);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState(null);
+  const [cardNumber, setCardNumber] = useState('4242424242424242');
+  const [expiry, setExpiry] = useState('12/26');
+  const [cvc, setCvc] = useState('123');
 
   useEffect(() => {
     getBills()
@@ -26,12 +29,25 @@ function Pay() {
   const totalOwed = unpaid.reduce((sum, b) => sum + parseFloat(b.total_amount), 0);
   const hasOverdue = unpaid.some(b => b.status === 'overdue');
 
+  const isFormValid = () => {
+    const cardRegex = /^\d{16}$/;     // Exactly 16 digits
+    const cvcRegex = /^\d{3}$/;       // Exactly 3 digits
+    const expiryRegex = /^(0[1-9]|1[0-2])\/\d{2}$/; // MM/YY format
+
+    return (
+      cardRegex.test(cardNumber) &&
+      cvcRegex.test(cvc) &&
+      expiryRegex.test(expiry)
+    );
+  };
+
   const handlePay = async () => {
     if (!payConfirm) return;
     setPaying(true);
     setPayError(null);
     try {
-      const res = await payBill(payConfirm.id);
+      // We now pass the object as the second argument
+      const res = await payBill(payConfirm.id, { cardNumber, expiry, cvc });
       setBills(prev => prev.map(b => b.id === payConfirm.id ? res.data.bill : b));
       setPayConfirm(null);
     } catch (err) {
@@ -165,6 +181,45 @@ function Pay() {
               </div>
             </div>
 
+            {/* New Mock Payment Fields with Validation */}
+            <div className="px-4 py-3 bg-white border-t border-gray-100 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Card Number</label>
+                <input 
+                  type="text" 
+                  value={cardNumber}
+                  maxLength="16"
+                  onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-hydro-deep-aqua"
+                  placeholder="16-digit card number"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">Expiry</label>
+                  <input 
+                    type="text" 
+                    value={expiry}
+                    maxLength="5"
+                    onChange={(e) => setExpiry(e.target.value)}
+                    placeholder="MM/YY"
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-hydro-deep-aqua"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">CVC</label>
+                  <input 
+                    type="text" 
+                    value={cvc}
+                    maxLength="3"
+                    onChange={(e) => setCvc(e.target.value.replace(/\D/g, ''))}
+                    className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-hydro-deep-aqua"
+                    placeholder="123"
+                  />
+                </div>
+              </div>
+            </div>
+
             {payError && <p className="text-sm text-red-600 mb-3">{payError}</p>}
 
             <div className="flex gap-3">
@@ -177,7 +232,7 @@ function Pay() {
               </button>
               <button
                 onClick={handlePay}
-                disabled={paying}
+                disabled={paying || !isFormValid()}
                 className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
                 style={{ background: '#0A4C78' }}
                 onMouseEnter={e => { if (!paying) e.currentTarget.style.opacity = '0.85'; }}

@@ -39,7 +39,7 @@ export const getForecasts = (params) => api.get('/forecasts', { params });
 // Bills
 export const getBills = (params) => api.get('/billing/bills', { params });
 export const getBill = (id) => api.get(`/billing/bills/${id}`);
-export const payBill = (id) => api.post(`/billing/bills/${id}/pay`);
+export const payBill = (id, data) => api.post(`/billing/bills/${id}/pay`, data);
 export const adminSearchBills = (params) => api.get('/billing/admin/bills', { params });
 export const getBillingStats = () => api.get('/billing/stats');
 export const generateBill = (data) => api.post('/billing/generate', data);

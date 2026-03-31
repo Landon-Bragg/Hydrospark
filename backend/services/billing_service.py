@@ -167,3 +167,19 @@ class BillingService:
             import traceback
             traceback.print_exc()
             return {'error': str(e)}
+
+    def process_mock_payment(self, bill, payment_data):
+        """Process mock payment."""
+        card_number = payment_data.get('cardNumber', '')
+
+        # Mock validation logic: succeed only if card starts with '4242'
+        if not card_number.startswith('4242'):
+            return {'error': 'Payment declined. Please use a valid test card.'}
+
+        # Update bill status
+        bill.status = 'paid'
+        bill.paid_at = datetime.utcnow()
+        bill.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return {'bill': bill.to_dict()}

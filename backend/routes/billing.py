@@ -223,28 +223,26 @@ def pay_bill(bill_id):
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
 
-        if user.role != 'customer':
-            return jsonify({'error': 'Customers only'}), 403
-
-        if not user.customer:
-            return jsonify({'error': 'Customer profile not found'}), 404
+        if user.role != 'customer' or not user.customer:
+            return jsonify({'error': 'Customer profile required'}), 403
 
         bill = Bill.query.get(bill_id)
-        if not bill:
-            return jsonify({'error': 'Bill not found'}), 404
-
-        if bill.customer_id != user.customer.id:
-            return jsonify({'error': 'Access denied'}), 403
+        if not bill or bill.customer_id != user.customer.id:
+            return jsonify({'error': 'Bill not found or access denied'}), 404
 
         if bill.status == 'paid':
             return jsonify({'error': 'Bill is already paid'}), 400
 
-        bill.status = 'paid'
-        bill.paid_at = datetime.utcnow()
-        bill.updated_at = datetime.utcnow()
-        db.session.commit()
+        # Extract payment data and delegate to service
+        payment_data = request.get_json() or {}
+        from services.billing_service import BillingService
+        
+        result = BillingService().process_mock_payment(bill, payment_data)
 
-        return jsonify({'message': 'Payment successful', 'bill': bill.to_dict()}), 200
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+
+        return jsonify({'message': 'Payment successful', 'bill': result['bill']}), 200
 
     except Exception as e:
         db.session.rollback()
