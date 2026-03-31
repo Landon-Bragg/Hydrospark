@@ -362,6 +362,7 @@ function CustomerInbox() {
   const [compose, setCompose] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [openNotif, setOpenNotif] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -393,6 +394,11 @@ function CustomerInbox() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleOpenNotif = (notif) => {
+    setOpenNotif(notif);
+    if (!notif.is_read) handleMarkRead(notif.id);
   };
 
   const handleSend = async () => {
@@ -468,16 +474,17 @@ function CustomerInbox() {
             </div>
           ) : (
             notifications.map(notif => (
-              <div
+              <button
                 key={notif.id}
-                className="card"
+                onClick={() => handleOpenNotif(notif)}
+                className="card w-full text-left transition-all hover:shadow-md"
                 style={{
                   borderLeft: notif.is_read ? '3px solid #e5e7eb' : '3px solid #0A4C78',
                   opacity: notif.is_read ? 0.7 : 1,
                 }}
               >
                 <div className="flex justify-between items-start gap-4">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {!notif.is_read && (
                         <span className="w-2 h-2 rounded-full flex-shrink-0"
@@ -485,23 +492,50 @@ function CustomerInbox() {
                       )}
                       <p className="font-semibold text-gray-800">{notif.title}</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{notif.message}</p>
+                    <p className="text-sm text-gray-600 mt-1 truncate">{notif.message}</p>
                     <p className="text-xs text-gray-400 mt-2">
                       From {notif.created_by_name || 'HydroSpark'} · {formatTime(notif.created_at)}
                     </p>
                   </div>
-                  {!notif.is_read && (
-                    <button
-                      onClick={() => handleMarkRead(notif.id)}
-                      className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0"
-                    >
-                      Mark read
-                    </button>
-                  )}
+                  <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">Open →</span>
                 </div>
-              </div>
+              </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* Notification detail modal */}
+      {openNotif && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setOpenNotif(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4" style={{ background: '#0A4C78' }}>
+              <p className="text-white font-bold text-lg">{openNotif.title}</p>
+              <p className="text-blue-200 text-xs mt-0.5">
+                From {openNotif.created_by_name || 'HydroSpark'} · {formatTime(openNotif.created_at)}
+              </p>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-gray-700 text-sm whitespace-pre-wrap" style={{ lineHeight: '1.6' }}>
+                {openNotif.message}
+              </p>
+            </div>
+            <div className="px-6 pb-5 flex justify-end">
+              <button
+                onClick={() => setOpenNotif(null)}
+                className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
