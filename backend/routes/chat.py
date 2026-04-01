@@ -257,6 +257,33 @@ def execute_tool(name, inputs, user, customer):
     return {"error": f"Unknown tool: {name}"}
 
 
+# ---------------------------------------------------------------------------
+# Hard-coded pre-flight guard — these requests never reach the LLM
+# ---------------------------------------------------------------------------
+_ACTION_PHRASES = [
+    "send someone", "send a tech", "send out", "send a plumber", "send a crew",
+    "send an inspector", "send a person", "send somebody",
+    "dispatch", "come to my", "come out to", "come fix", "come check", "come by",
+    "schedule an appointment", "schedule a visit", "schedule a tech", "book an appointment",
+    "report an outage", "report a leak", "report a break", "report a problem",
+    "file a complaint", "open a ticket", "submit a request", "put in a request",
+    "turn on my water", "turn off my water", "restore my service",
+    "fix my pipe", "fix my meter", "fix my leak", "repair my", "replace my",
+    "burst pipe", "flooding", "no water at", "call me back", "call me at",
+]
+
+_CANNOT_DO = (
+    "I can't help with that. I'm a read-only assistant — I can only look up your account data "
+    "and answer billing questions. Please contact HydroSpark support directly for service "
+    "requests, emergencies, or any account changes."
+)
+
+
+def _is_action_request(message: str) -> bool:
+    msg = message.lower()
+    return any(phrase in msg for phrase in _ACTION_PHRASES)
+
+
 @chat_bp.route("/message", methods=["POST"])
 @jwt_required()
 def chat_message():
@@ -266,11 +293,6 @@ def chat_message():
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             return jsonify({"error": "Chat service not configured (missing GROQ_API_KEY)"}), 503
-
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://api.groq.com/openai/v1",
-        )
 
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
@@ -283,38 +305,53 @@ def chat_message():
         if not message:
             return jsonify({"error": "Message required"}), 400
 
+        # Hard block — never reaches the LLM
+        if _is_action_request(message):
+            return jsonify({"response": _CANNOT_DO})
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.groq.com/openai/v1",
+        )
+
         is_admin = user.role in ("admin", "billing")
         tools = CUSTOMER_TOOLS + (ADMIN_TOOLS if is_admin else [])
 
         customer_name = customer.customer_name if customer else user.email
         system_prompt = (
-            f"You are HydroBot, the official assistant for HydroSpark Water Utility. "
+            f"You are HydroBot, a strictly limited read-only assistant for HydroSpark Water Utility. "
             f"You are speaking with {customer_name} (role: {user.role}). Today is {date.today().isoformat()}.\n\n"
 
-            "SCOPE: You ONLY answer questions about this user's water account — usage, bills, forecasts, anomaly alerts, "
-            "account status, and general water billing policy. "
-            "If asked anything outside this scope, respond: 'I can only help with water billing and account questions. "
-            "Please contact support for anything else.'\n\n"
+            "YOUR ONLY ALLOWED FUNCTIONS:\n"
+            "1. Look up this account's data using the provided tools (usage, bills, alerts, forecasts).\n"
+            "2. Answer factual FAQ questions about water billing policy listed below.\n"
+            "Nothing else. You have no other capabilities.\n\n"
+
+            "YOU ABSOLUTELY CANNOT:\n"
+            "- Dispatch, schedule, or promise any technician, crew, or physical visit.\n"
+            "- Accept payments or change account details.\n"
+            "- Report outages, leaks, or emergencies — always direct to support for these.\n"
+            "- Answer questions unrelated to this water account.\n"
+            "- Speculate, estimate, or invent anything not returned by a tool.\n\n"
+
+            "IF ASKED TO DO ANYTHING ON THAT LIST, reply with exactly this and nothing more:\n"
+            "'I can't help with that. Please contact HydroSpark support directly.'\n\n"
 
             "RESPONSE RULES:\n"
-            "- Be concise: 1–3 sentences maximum.\n"
-            "- Always use exact numbers from tool results, never estimate.\n"
-            "- Do not repeat the user's question back to them.\n"
-            "- If a tool returns no data, say so clearly (e.g. 'You have no unpaid bills.').\n\n"
+            "- Maximum 2-3 sentences.\n"
+            "- Use only exact numbers from tool results — never estimate.\n"
+            "- If a tool returns no data, say so plainly (e.g. 'You have no unpaid bills.').\n"
+            "- Do not repeat the user's question.\n\n"
 
-            "BILLING FAQ (use this knowledge to answer common questions without calling tools):\n"
+            "BILLING FAQ:\n"
             "- Usage is measured in CCF (hundred cubic feet). 1 CCF ≈ 748 gallons.\n"
-            "- Billing rates: Residential $5.72/CCF, Municipal $5.72/CCF, Commercial $5.72/CCF. "
-            "  Some accounts have a custom rate set by the utility.\n"
-            "- Bills are generated monthly based on the billing cycle.\n"
-            "- Payment is due 30 days after the bill is issued. Overdue bills have not been paid after the due date.\n"
-            "- A 'pending' bill has been generated but not yet sent. A 'sent' bill has been delivered.\n"
-            "- Anomaly alerts are triggered when daily usage spikes more than 100% above the expected baseline — "
-            "  this can indicate a leak, irrigation issue, or unusually high consumption.\n"
-            "- A 'pending shutoff' notice means the account is delinquent and water service may be interrupted "
-            "  unless payment is made. 'Shutoff' means service has been suspended.\n"
-            "- To dispute a bill or report a billing error, contact the billing support team directly.\n"
-            "- Forecasts are ML-generated predictions of future usage based on historical patterns.\n"
+            "- Default rate: $5.72/CCF for all customer types. Some accounts have a custom rate.\n"
+            "- Bills are generated monthly. Payment is due 30 days after issuance.\n"
+            "- 'Pending' = generated but not yet sent. 'Sent' = delivered to customer.\n"
+            "- Anomaly alerts fire when daily usage exceeds 100% above the expected baseline.\n"
+            "- 'Pending shutoff' = delinquent account, service may be interrupted. 'Shutoff' = suspended.\n"
+            "- To dispute a bill or make account changes, contact the billing team — I cannot do this.\n"
+            "- Forecasts are ML-generated predictions based on historical usage patterns.\n"
         )
 
         messages = [{"role": "system", "content": system_prompt}]
