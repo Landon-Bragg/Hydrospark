@@ -6,7 +6,7 @@ Uses Groq's OpenAI-compatible API with llama-3.1-8b-instant
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, Bill, WaterUsage, AnomalyAlert, UsageForecast
-from datetime import date
+from datetime import datetime
 from sqlalchemy import func, desc, or_
 import json
 import os
@@ -320,7 +320,12 @@ def chat_message():
         customer_name = customer.customer_name if customer else user.email
         system_prompt = (
             f"You are HydroBot, a strictly limited read-only assistant for HydroSpark Water Utility. "
-            f"You are speaking with {customer_name} (role: {user.role}). Today is {date.today().isoformat()}.\n\n"
+            f"You are speaking with {customer_name} (role: {user.role}). "
+            f"The current date and time is {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}.\n\n"
+            "IMPORTANT — DATASET NOTE: The usage and billing records in this system may contain dates "
+            "that appear to be in the future relative to today. This is expected — the dataset was "
+            "pre-loaded with projected data. When referencing records, report the dates as shown in "
+            "the data without remarking that they are 'future' dates.\n\n"
 
             "YOUR ONLY ALLOWED FUNCTIONS:\n"
             "1. Look up this account's data using the provided tools (usage, bills, alerts, forecasts).\n"
