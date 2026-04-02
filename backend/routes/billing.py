@@ -278,11 +278,168 @@ def update_bill(bill_id):
         if 'due_date' in data:
             bill.due_date = datetime.fromisoformat(data['due_date']).date()
 
+        # Trigger autopay if billing staff just marked this bill as sent
+        if data.get('status') == 'sent':
+            customer = Customer.query.get(bill.customer_id)
+            if customer and customer.autopay_enabled and customer.payment_method_last4:
+                bill.status = 'paid'
+                bill.paid_at = datetime.utcnow()
+                # Notify the customer
+                try:
+                    from database import User
+                    from database import Notification
+                    cust_user = User.query.get(customer.user_id)
+                    if cust_user:
+                        notif = Notification(
+                            user_id=cust_user.id,
+                            created_by=user_id,
+                            title='Autopay Processed',
+                            message=(
+                                f'Your autopay has processed a payment of '
+                                f'${float(bill.total_amount):.2f} for the billing period '
+                                f'{bill.billing_period_start} to {bill.billing_period_end} '
+                                f'using your {customer.payment_method_type.capitalize()} '
+                                f'ending in {customer.payment_method_last4}.'
+                            ),
+                        )
+                        db.session.add(notif)
+                except Exception:
+                    pass
+
         bill.updated_at = datetime.utcnow()
         db.session.commit()
 
         return jsonify({'message': 'Bill updated', 'bill': bill.to_dict()}), 200
 
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Payment method & autopay ───────────────────────────────────────────────────
+
+@billing_bp.route('/payment-method', methods=['GET'])
+@jwt_required()
+def get_payment_method():
+    """Customer: get saved payment method and autopay status."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role != 'customer' or not user.customer:
+            return jsonify({'error': 'Customer only'}), 403
+        c = user.customer
+        return jsonify({
+            'autopay_enabled': bool(c.autopay_enabled),
+            'payment_method': {
+                'type': c.payment_method_type,
+                'last4': c.payment_method_last4,
+                'name': c.payment_method_name,
+                'expiry': c.payment_method_expiry,
+            } if c.payment_method_last4 else None,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/payment-method', methods=['POST'])
+@jwt_required()
+def save_payment_method():
+    """Customer: save or replace payment method (stores last4 only)."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role != 'customer' or not user.customer:
+            return jsonify({'error': 'Customer only'}), 403
+
+        data = request.get_json() or {}
+        card_number = str(data.get('card_number', '')).replace(' ', '').replace('-', '')
+        name = str(data.get('name', '')).strip()
+        expiry = str(data.get('expiry', '')).strip()
+
+        if len(card_number) < 13 or not card_number.isdigit():
+            return jsonify({'error': 'Invalid card number'}), 400
+        if not name:
+            return jsonify({'error': 'Cardholder name required'}), 400
+        if not expiry or len(expiry) < 4:
+            return jsonify({'error': 'Expiry required (MM/YY)'}), 400
+
+        first = card_number[0]
+        if first == '4':
+            card_type = 'visa'
+        elif first == '5':
+            card_type = 'mastercard'
+        elif first == '3':
+            card_type = 'amex'
+        elif first == '6':
+            card_type = 'discover'
+        else:
+            card_type = 'card'
+
+        c = user.customer
+        c.payment_method_type = card_type
+        c.payment_method_last4 = card_number[-4:]
+        c.payment_method_name = name
+        c.payment_method_expiry = expiry
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Payment method saved',
+            'payment_method': {
+                'type': c.payment_method_type,
+                'last4': c.payment_method_last4,
+                'name': c.payment_method_name,
+                'expiry': c.payment_method_expiry,
+            },
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/payment-method', methods=['DELETE'])
+@jwt_required()
+def delete_payment_method():
+    """Customer: remove payment method and disable autopay."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role != 'customer' or not user.customer:
+            return jsonify({'error': 'Customer only'}), 403
+
+        c = user.customer
+        c.payment_method_type = None
+        c.payment_method_last4 = None
+        c.payment_method_name = None
+        c.payment_method_expiry = None
+        c.autopay_enabled = False
+        db.session.commit()
+
+        return jsonify({'message': 'Payment method removed'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@billing_bp.route('/autopay', methods=['POST'])
+@jwt_required()
+def toggle_autopay():
+    """Customer: enable or disable autopay."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role != 'customer' or not user.customer:
+            return jsonify({'error': 'Customer only'}), 403
+
+        c = user.customer
+        enabled = request.get_json(silent=True).get('enabled', False)
+
+        if enabled and not c.payment_method_last4:
+            return jsonify({'error': 'Add a payment method before enabling autopay'}), 400
+
+        c.autopay_enabled = bool(enabled)
+        db.session.commit()
+
+        return jsonify({'autopay_enabled': c.autopay_enabled}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

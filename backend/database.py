@@ -73,6 +73,11 @@ class Customer(db.Model):
     water_status = db.Column(db.Enum('active', 'pending_shutoff', 'shutoff'), default='active')
     shutoff_notice_at = db.Column(db.DateTime, nullable=True)
     shutoff_at = db.Column(db.DateTime, nullable=True)
+    autopay_enabled = db.Column(db.Boolean, default=False)
+    payment_method_type = db.Column(db.String(20), nullable=True)   # visa, mastercard, amex, discover
+    payment_method_last4 = db.Column(db.String(4), nullable=True)
+    payment_method_name = db.Column(db.String(100), nullable=True)  # cardholder name
+    payment_method_expiry = db.Column(db.String(5), nullable=True)  # MM/YY
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -99,6 +104,11 @@ class Customer(db.Model):
             'water_status': self.water_status or 'active',
             'shutoff_notice_at': self.shutoff_notice_at.isoformat() if self.shutoff_notice_at else None,
             'shutoff_at': self.shutoff_at.isoformat() if self.shutoff_at else None,
+            'autopay_enabled': bool(self.autopay_enabled),
+            'payment_method_type': self.payment_method_type,
+            'payment_method_last4': self.payment_method_last4,
+            'payment_method_name': self.payment_method_name,
+            'payment_method_expiry': self.payment_method_expiry,
         }
 
 # Water Usage Model
