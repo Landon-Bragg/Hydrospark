@@ -48,7 +48,7 @@ CORS(app, resources={r"/api/*": {
         "http://localhost:3000",
         "https://exciting-abundance-production.up.railway.app"
     ],
-    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
 jwt = JWTManager(app)
@@ -83,6 +83,27 @@ init_db(app)
 # Create any missing tables (safe on existing data)
 with app.app_context():
     db.create_all()
+
+# Migrate existing DBs — add new columns if they don't exist yet
+def run_migrations():
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS autopay_enabled BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_type VARCHAR(20) NULL",
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_last4 VARCHAR(4) NULL",
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_name VARCHAR(100) NULL",
+        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_expiry VARCHAR(5) NULL",
+    ]
+    with db.engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass
+
+with app.app_context():
+    run_migrations()
 
 # Seed default users if they don't exist
 def seed_default_users():
