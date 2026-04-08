@@ -293,12 +293,6 @@ function AdminDashboard() {
     <div>
       <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6" style={{ letterSpacing: '-0.03em' }}>Admin Dashboard</h1>
 
-      {importError && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {importError}
-        </div>
-      )}
-
       {/* ── TOP ROW: Quick-action cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
 
@@ -390,7 +384,11 @@ function AdminDashboard() {
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">Data Import</h2>
           <p className="text-gray-600 mb-4">Import CSV/XLSX usage data (max 100MB)</p>
-          
+
+          {importError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-3 text-sm">{importError}</div>
+          )}
+
           {result && (
             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
               <p className="font-semibold">{result.message}</p>
@@ -408,7 +406,7 @@ function AdminDashboard() {
               )}
             </div>
           )}
-          
+
           <input
             id="file-input"
             type="file"
@@ -417,89 +415,33 @@ function AdminDashboard() {
             className="input-field mb-4"
             disabled={importing}
           />
-          
+
           {file && (
             <p className="text-sm text-gray-600 mb-2">
               Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
             </p>
           )}
-          
-          <button
-            onClick={handleImport}
-            disabled={!file || importing}
-            className="btn-primary w-full"
-          >
-            {importing ? 'Importing... This may take several minutes' : 'Import Data'}
+
+          <button onClick={handleImport} disabled={!file || importing} className="btn-primary w-full">
+            {importing ? 'Importing…' : 'Import Data'}
           </button>
-          
+
           {importing && (
             <div className="mt-4 text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-hydro-spark-blue"></div>
-              <p className="text-sm text-gray-600 mt-2">Processing large file... Please wait</p>
+              <p className="text-sm text-gray-600 mt-2">Processing… please wait</p>
             </div>
           )}
         </div>
 
-        {/* Anomaly Detection Card */}
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">Anomaly Detection</h2>
-          <p className="text-gray-600 mb-4">
-            Run ML-based anomaly detection on all customer usage data to identify spikes, leaks, and unusual patterns.
-          </p>
-
-          {anomalyError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
-              {anomalyError}
-            </div>
-          )}
-
-          {anomalyResult && (
-            <div className={`px-4 py-3 rounded mb-4 border ${anomalyResult.no_data ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-green-100 border-green-400 text-green-700'}`}>
-              <p className="font-semibold text-sm">{anomalyResult.message}</p>
-              {!anomalyResult.no_data && (
-                <p className="text-sm mt-1">
-                  {anomalyResult.anomalies?.length || 0} anomal{anomalyResult.anomalies?.length === 1 ? 'y' : 'ies'} flagged
-                </p>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={handleDetectAnomalies}
-            disabled={detectingAnomalies}
-            className="btn-primary w-full"
-          >
-            {detectingAnomalies ? 'Running Detection...' : '🚨 Run Anomaly Detection'}
-          </button>
-
-          {detectingAnomalies && (
-            <div className="mt-4 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-hydro-spark-blue"></div>
-              <p className="text-sm text-gray-600 mt-2">Analyzing usage patterns... This may take 1-2 minutes</p>
-            </div>
-          )}
-
-          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-            <p className="font-semibold text-hydro-deep-aqua mb-1">Detection Method:</p>
-            <p className="text-gray-700">Uses Isolation Forest ML algorithm with dynamic thresholds to identify:</p>
-            <ul className="list-disc list-inside mt-2 text-gray-700">
-              <li>Usage spikes (100%+ above normal)</li>
-              <li>Potential leaks (unusual patterns)</li>
-              <li>Abnormal consumption</li>
-            </ul>
-          </div>
-        </div>
-
-        {/* System Jobs: combines anomaly detection + historical bill generation */}
+        {/* System Jobs */}
         <div className="card">
           <h2 className="text-xl font-semibold mb-1">System Jobs</h2>
           <p className="text-sm text-gray-500 mb-4">Periodic maintenance tasks — run as needed.</p>
 
           <div className="space-y-3">
             {anomalyError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
-                {anomalyError}
-              </div>
+              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">{anomalyError}</div>
             )}
             {anomalyResult && (
               <div className={`px-3 py-2 rounded text-sm border ${anomalyResult.no_data ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-green-100 border-green-400 text-green-700'}`}>
@@ -507,14 +449,12 @@ function AdminDashboard() {
               </div>
             )}
             <button onClick={handleDetectAnomalies} disabled={detectingAnomalies} className="btn-primary w-full">
-              {detectingAnomalies ? 'Running Detection...' : 'Run Anomaly Detection'}
+              {detectingAnomalies ? 'Running Detection…' : 'Run Anomaly Detection'}
             </button>
 
             <div className="border-t pt-3">
               {billRunError && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm mb-2">
-                  {billRunError}
-                </div>
+                <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm mb-2">{billRunError}</div>
               )}
               {billResult && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded text-sm mb-2">
@@ -522,7 +462,7 @@ function AdminDashboard() {
                 </div>
               )}
               <button onClick={handleGenerateBills} disabled={generatingBills} className="btn-primary w-full">
-                {generatingBills ? 'Generating...' : 'Generate Historical Bills'}
+                {generatingBills ? 'Generating…' : 'Generate Historical Bills'}
               </button>
               <p className="text-xs text-gray-400 mt-2">Builds monthly bills for all customers from historical usage data.</p>
             </div>
