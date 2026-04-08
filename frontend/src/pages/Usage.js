@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill } from '../services/api';
 import {
@@ -48,17 +49,13 @@ const BILL_STATUS_COLOR = {
   overdue: 'bg-red-100 text-red-700',
 };
 
-function CustomerDetail({ customer, dateRange, onClear, canEditBills }) {
+function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill, updatedBillId, updatedBill }) {
   const [usage, setUsage] = useState([]);
   const [loadingDetail, setLoadingDetail] = useState(true);
 
   // Bills state (only loaded for billing/admin)
   const [bills, setBills] = useState([]);
   const [billsLoading, setBillsLoading] = useState(false);
-  const [editingBill, setEditingBill] = useState(null);
-  const [editForm, setEditForm] = useState({ total_amount: '', status: '', due_date: '' });
-  const [billSaving, setBillSaving] = useState(false);
-  const [billError, setBillError] = useState(null);
 
   useEffect(() => {
     setLoadingDetail(true);
@@ -77,30 +74,12 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills }) {
       .finally(() => setBillsLoading(false));
   }, [customer.customer_id, canEditBills]);
 
-  const openEdit = (bill) => {
-    setEditingBill(bill);
-    setEditForm({
-      total_amount: parseFloat(bill.total_amount).toFixed(2),
-      status: bill.status,
-      due_date: bill.due_date,
-    });
-    setBillError(null);
-  };
-
-  const handleEditSave = async () => {
-    setBillSaving(true);
-    setBillError(null);
-    try {
-      const res = await updateBill(editingBill.id, editForm);
-      const updated = { ...editingBill, ...res.data.bill };
-      setBills(prev => prev.map(b => b.id === editingBill.id ? updated : b));
-      setEditingBill(null);
-    } catch (err) {
-      setBillError(err.response?.data?.error || 'Failed to save');
-    } finally {
-      setBillSaving(false);
+  // Apply updates pushed down from parent after a save
+  useEffect(() => {
+    if (updatedBillId && updatedBill) {
+      setBills(prev => prev.map(b => b.id === updatedBillId ? { ...b, ...updatedBill } : b));
     }
-  };
+  }, [updatedBillId, updatedBill]);
 
   const totalUsage = usage.reduce((s, u) => s + parseFloat(u.daily_usage_ccf || 0), 0);
   const avgDaily = usage.length > 0 ? totalUsage / usage.length : 0;
@@ -290,7 +269,7 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills }) {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
-                          onClick={() => openEdit(b)}
+                          onClick={() => onEditBill(b)}
                           className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
                         >
                           Edit
@@ -305,75 +284,6 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills }) {
         </div>
       )}
 
-      {editingBill && (
-        <div
-          className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
-          onClick={() => { if (!billSaving) setEditingBill(null); }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-hydro-deep-aqua mb-1">Edit Bill</h3>
-            <p className="text-sm text-gray-500 mb-5">
-              {editingBill.customer_name} &bull; {editingBill.billing_period_start} to {editingBill.billing_period_end}
-            </p>
-            {billError && (
-              <p className="text-red-600 text-sm mb-3">{billError}</p>
-            )}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editForm.total_amount}
-                  onChange={e => setEditForm(f => ({ ...f, total_amount: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={editForm.due_date}
-                  onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
-                <select
-                  value={editForm.status}
-                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="sent">Sent</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setEditingBill(null)}
-                disabled={billSaving}
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                disabled={billSaving}
-                className="flex-1 px-4 py-2 rounded-lg text-white text-sm font-semibold transition disabled:opacity-50"
-                style={{ background: '#0A4C78' }}
-              >
-                {billSaving ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -391,6 +301,37 @@ function Usage() {
   const [allCustomers, setAllCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
+
+  // Edit bill modal state (lifted here so modal renders outside .card stacking context)
+  const [editingBill, setEditingBill] = useState(null);
+  const [editForm, setEditForm] = useState({ total_amount: '', status: '', due_date: '' });
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState(null);
+  const [savedBill, setSavedBill] = useState(null); // { id, bill } to push back into CustomerDetail
+
+  const openEditBill = (bill) => {
+    setEditingBill(bill);
+    setEditForm({
+      total_amount: parseFloat(bill.total_amount).toFixed(2),
+      status: bill.status,
+      due_date: bill.due_date,
+    });
+    setBillError(null);
+  };
+
+  const handleEditSave = async () => {
+    setBillSaving(true);
+    setBillError(null);
+    try {
+      const res = await updateBill(editingBill.id, editForm);
+      setSavedBill({ id: editingBill.id, bill: res.data.bill });
+      setEditingBill(null);
+    } catch (err) {
+      setBillError(err.response?.data?.error || 'Failed to save');
+    } finally {
+      setBillSaving(false);
+    }
+  };
 
   // Customer state
   const [myUsage, setMyUsage] = useState([]);
@@ -579,6 +520,9 @@ function Usage() {
                 dateRange={dateRange}
                 onClear={() => setSelectedCustomer(null)}
                 canEditBills={isAdmin}
+                onEditBill={openEditBill}
+                updatedBillId={savedBill?.id}
+                updatedBill={savedBill?.bill}
               />
             ) : (
               <div className="py-12 text-center text-gray-400">
@@ -733,6 +677,77 @@ function Usage() {
             )}
           </div>
         </>
+      )}
+
+      {editingBill && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => { if (!billSaving) setEditingBill(null); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-hydro-deep-aqua mb-1">Edit Bill</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              {editingBill.customer_name} &bull; {editingBill.billing_period_start} to {editingBill.billing_period_end}
+            </p>
+            {billError && (
+              <p className="text-red-600 text-sm mb-3">{billError}</p>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editForm.total_amount}
+                  onChange={e => setEditForm(f => ({ ...f, total_amount: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={editForm.due_date}
+                  onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="sent">Sent</option>
+                  <option value="paid">Paid</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingBill(null)}
+                disabled={billSaving}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={billSaving}
+                className="flex-1 px-4 py-2 rounded-lg text-white text-sm font-semibold transition disabled:opacity-50"
+                style={{ background: '#0A4C78' }}
+              >
+                {billSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
