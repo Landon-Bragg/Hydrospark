@@ -5,7 +5,7 @@ Uses Groq's OpenAI-compatible API with llama-3.1-8b-instant
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, Bill, WaterUsage, AnomalyAlert, UsageForecast
+from database import db, User, Customer, Bill, WaterUsage, AnomalyAlert, UsageForecast, BillingRate
 from datetime import datetime
 from sqlalchemy import func, desc, or_
 import json
@@ -58,6 +58,14 @@ CUSTOMER_TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []}
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_billing_rates",
+            "description": "Get the current billing rates for all customer types",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+    },
 ]
 
 ADMIN_TOOLS = [
@@ -88,6 +96,14 @@ ADMIN_TOOLS = [
         "function": {
             "name": "get_delinquent_accounts",
             "description": "Get customers with overdue bills or water shutoff/pending status",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_billing_rates",
+            "description": "Get the current billing rates for all customer types",
             "parameters": {"type": "object", "properties": {}, "required": []}
         }
     },
@@ -254,6 +270,20 @@ def execute_tool(name, inputs, user, customer):
             ]
         }
 
+    if name == "get_billing_rates":
+        rates = BillingRate.query.filter_by(is_active=True).all()
+        return {
+            "billing_rates": [
+                {
+                    "customer_type": r.customer_type,
+                    "rate_type": r.rate_type,
+                    "flat_rate_per_ccf": float(r.flat_rate) if r.flat_rate else None,
+                }
+                for r in rates
+            ],
+            "note": "Customers may have a custom rate override. Default fallback is $5.72/CCF."
+        }
+
     return {"error": f"Unknown tool: {name}"}
 
 
@@ -328,15 +358,15 @@ def chat_message():
             "the data without remarking that they are 'future' dates.\n\n"
 
             "YOUR ONLY ALLOWED FUNCTIONS:\n"
-            "1. Look up this account's data using the provided tools (usage, bills, alerts, forecasts).\n"
-            "2. Answer factual FAQ questions about water billing policy listed below.\n"
+            "1. Look up account data using the provided tools (usage, bills, alerts, forecasts, rates).\n"
+            "2. Answer any question in the FAQ section below — always answer these directly without refusing.\n"
             "Nothing else. You have no other capabilities.\n\n"
 
             "YOU ABSOLUTELY CANNOT:\n"
             "- Dispatch, schedule, or promise any technician, crew, or physical visit.\n"
             "- Accept payments or change account details.\n"
             "- Report outages, leaks, or emergencies — always direct to support for these.\n"
-            "- Answer questions unrelated to this water account.\n"
+            "- Answer questions completely unrelated to water utility service or billing.\n"
             "- Speculate, estimate, or invent anything not returned by a tool.\n\n"
 
             "IF ASKED TO DO ANYTHING ON THAT LIST, reply with exactly this and nothing more:\n"
@@ -348,15 +378,15 @@ def chat_message():
             "- If a tool returns no data, say so plainly (e.g. 'You have no unpaid bills.').\n"
             "- Do not repeat the user's question.\n\n"
 
-            "BILLING FAQ:\n"
-            "- Usage is measured in CCF (hundred cubic feet). 1 CCF ≈ 748 gallons.\n"
-            "- Default rate: $5.72/CCF for all customer types. Some accounts have a custom rate.\n"
-            "- Bills are generated monthly. Payment is due 30 days after issuance.\n"
-            "- 'Pending' = generated but not yet sent. 'Sent' = delivered to customer.\n"
-            "- Anomaly alerts fire when daily usage exceeds 100% above the expected baseline.\n"
-            "- 'Pending shutoff' = delinquent account, service may be interrupted. 'Shutoff' = suspended.\n"
-            "- To dispute a bill or make account changes, contact the billing team — I cannot do this.\n"
-            "- Forecasts are ML-generated predictions based on historical usage patterns.\n"
+            "FAQ — answer these questions directly, always:\n"
+            "Q: What does CCF mean? A: CCF stands for hundred cubic feet, the unit used to measure water usage. 1 CCF is approximately 748 gallons.\n"
+            "Q: How is my bill calculated? A: Your usage in CCF is multiplied by your rate per CCF. The default rate is $5.72/CCF, but some accounts have a custom or zip-code-based rate. Bills are generated monthly and due 30 days after issuance.\n"
+            "Q: What are the current billing rates? A: Use the get_billing_rates tool to retrieve live rates, then report them. The default fallback is $5.72/CCF for all customer types.\n"
+            "Q: What triggers an anomaly alert? A: An anomaly alert fires automatically when a customer's daily usage exceeds 100% above their expected baseline.\n"
+            "Q: What does a pending shutoff mean? A: Pending shutoff means the account is delinquent and service interruption is possible. 'Shutoff' means service has been suspended.\n"
+            "Q: What does a pending bill status mean? A: Pending means the bill has been generated but not yet sent to the customer. Sent means it has been delivered.\n"
+            "Q: What are forecasts? A: Forecasts are ML-generated predictions of upcoming usage and cost based on the customer's historical usage patterns.\n"
+            "Q: How do I dispute a bill or make account changes? A: Contact the HydroSpark billing team directly — I cannot make account changes.\n"
         )
 
         messages = [{"role": "system", "content": system_prompt}]
