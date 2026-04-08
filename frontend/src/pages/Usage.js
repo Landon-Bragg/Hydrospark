@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges } from '../services/api';
+import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill } from '../services/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell
@@ -41,9 +41,24 @@ function UsageTooltip({ active, payload }) {
   return null;
 }
 
-function CustomerDetail({ customer, dateRange, onClear }) {
+const BILL_STATUS_COLOR = {
+  paid:    'bg-green-100 text-green-700',
+  sent:    'bg-blue-100 text-blue-700',
+  pending: 'bg-yellow-100 text-yellow-800',
+  overdue: 'bg-red-100 text-red-700',
+};
+
+function CustomerDetail({ customer, dateRange, onClear, canEditBills }) {
   const [usage, setUsage] = useState([]);
   const [loadingDetail, setLoadingDetail] = useState(true);
+
+  // Bills state (only loaded for billing/admin)
+  const [bills, setBills] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const [editingBill, setEditingBill] = useState(null);
+  const [editForm, setEditForm] = useState({ total_amount: '', status: '', due_date: '' });
+  const [billSaving, setBillSaving] = useState(false);
+  const [billError, setBillError] = useState(null);
 
   useEffect(() => {
     setLoadingDetail(true);
@@ -52,6 +67,40 @@ function CustomerDetail({ customer, dateRange, onClear }) {
       .catch(() => setUsage([]))
       .finally(() => setLoadingDetail(false));
   }, [customer.customer_id, dateRange]);
+
+  useEffect(() => {
+    if (!canEditBills) return;
+    setBillsLoading(true);
+    adminSearchBills({ customer_id: customer.customer_id, per_page: 20 })
+      .then(res => setBills(res.data.bills || []))
+      .catch(() => setBills([]))
+      .finally(() => setBillsLoading(false));
+  }, [customer.customer_id, canEditBills]);
+
+  const openEdit = (bill) => {
+    setEditingBill(bill);
+    setEditForm({
+      total_amount: parseFloat(bill.total_amount).toFixed(2),
+      status: bill.status,
+      due_date: bill.due_date,
+    });
+    setBillError(null);
+  };
+
+  const handleEditSave = async () => {
+    setBillSaving(true);
+    setBillError(null);
+    try {
+      const res = await updateBill(editingBill.id, editForm);
+      const updated = { ...editingBill, ...res.data.bill };
+      setBills(prev => prev.map(b => b.id === editingBill.id ? updated : b));
+      setEditingBill(null);
+    } catch (err) {
+      setBillError(err.response?.data?.error || 'Failed to save');
+    } finally {
+      setBillSaving(false);
+    }
+  };
 
   const totalUsage = usage.reduce((s, u) => s + parseFloat(u.daily_usage_ccf || 0), 0);
   const avgDaily = usage.length > 0 ? totalUsage / usage.length : 0;
@@ -206,6 +255,123 @@ function CustomerDetail({ customer, dateRange, onClear }) {
               Showing first 100 of {usage.length} records
             </p>
           )}
+        </div>
+      )}
+
+      {canEditBills && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Bills</h3>
+          {billsLoading ? (
+            <p className="text-sm text-gray-400">Loading bills…</p>
+          ) : bills.length === 0 ? (
+            <p className="text-sm text-gray-400">No bills found.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-gray-600 font-semibold">Period</th>
+                    <th className="px-3 py-2 text-left text-gray-600 font-semibold">Amount</th>
+                    <th className="px-3 py-2 text-left text-gray-600 font-semibold">Due Date</th>
+                    <th className="px-3 py-2 text-left text-gray-600 font-semibold">Status</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {bills.map(b => (
+                    <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap">{b.billing_period_start} → {b.billing_period_end}</td>
+                      <td className="px-3 py-2 font-semibold text-hydro-deep-aqua">${parseFloat(b.total_amount).toFixed(2)}</td>
+                      <td className="px-3 py-2">{b.due_date}</td>
+                      <td className="px-3 py-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${BILL_STATUS_COLOR[b.status] || 'bg-gray-100 text-gray-600'}`}>
+                          {b.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => openEdit(b)}
+                          className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {editingBill && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => { if (!billSaving) setEditingBill(null); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-hydro-deep-aqua mb-1">Edit Bill</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              {editingBill.customer_name} &bull; {editingBill.billing_period_start} to {editingBill.billing_period_end}
+            </p>
+            {billError && (
+              <p className="text-red-600 text-sm mb-3">{billError}</p>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editForm.total_amount}
+                  onChange={e => setEditForm(f => ({ ...f, total_amount: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={editForm.due_date}
+                  onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="sent">Sent</option>
+                  <option value="paid">Paid</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingBill(null)}
+                disabled={billSaving}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={billSaving}
+                className="flex-1 px-4 py-2 rounded-lg text-white text-sm font-semibold transition disabled:opacity-50"
+                style={{ background: '#0A4C78' }}
+              >
+                {billSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -412,6 +578,7 @@ function Usage() {
                 customer={selectedCustomer}
                 dateRange={dateRange}
                 onClear={() => setSelectedCustomer(null)}
+                canEditBills={isAdmin}
               />
             ) : (
               <div className="py-12 text-center text-gray-400">
