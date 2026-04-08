@@ -367,7 +367,7 @@ def chat_message():
         # ReAct loop — max 4 tool calls
         for _ in range(4):
             response = client.chat.completions.create(
-                model="llama3-groq-8b-8192-tool-use-preview",
+                model="llama-3.3-70b-versatile",
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
