@@ -94,12 +94,15 @@ def create_user():
         db.session.flush()
 
         if data.get('role', 'customer') == 'customer':
+            # Auto-generate a location_id if one wasn't provided
+            location_id = data.get('location_id') or f"INV-{secrets.token_hex(4).upper()}"
             customer = Customer(
                 user_id=user.id,
                 customer_name=data.get('customer_name') or f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or data['email'],
                 mailing_address=data.get('mailing_address', ''),
-                location_id=data.get('location_id'),
+                location_id=location_id,
                 customer_type=data.get('customer_type', 'Residential'),
+                zip_code=data.get('zip_code') or None,
             )
             db.session.add(customer)
 
@@ -508,25 +511,51 @@ def detect_anomalies():
         if not user or user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
 
-        from services.ml_service import MLService
-        ml_service = MLService()
+        # Friendly pre-check: no data imported yet
+        usage_count = db.session.query(func.count(WaterUsage.id)).scalar() or 0
+        if usage_count == 0:
+            return jsonify({
+                'message': 'No usage data found — import a CSV file first, then run detection.',
+                'anomalies': [],
+                'no_data': True,
+            }), 200
+
+        customer_count = db.session.query(func.count(Customer.id)).scalar() or 0
+        if customer_count == 0:
+            return jsonify({
+                'message': 'No customer accounts found — import a CSV file first.',
+                'anomalies': [],
+                'no_data': True,
+            }), 200
+
+        try:
+            from services.ml_service import MLService
+            ml_service = MLService()
+        except Exception:
+            return jsonify({'error': 'ML service unavailable. Check that all dependencies are installed.'}), 500
 
         customers = Customer.query.all()
         results = []
+        errors = []
         for customer in customers:
-            customer_results = ml_service.detect_anomalies(customer.id)
-            results.extend(customer_results)
+            try:
+                customer_results = ml_service.detect_anomalies(customer.id)
+                results.extend(customer_results)
+            except Exception as ce:
+                errors.append(f"{customer.customer_name}: {str(ce)}")
+
+        msg = f'Detected {len(results)} anomal{"y" if len(results) == 1 else "ies"} across {len(customers)} customers'
+        if errors:
+            msg += f' ({len(errors)} customers skipped due to insufficient data)'
 
         return jsonify({
-            'message': f'Detected {len(results)} anomalies',
-            'anomalies': results
+            'message': msg,
+            'anomalies': results,
         }), 200
 
     except Exception as e:
         print(f"Anomaly detection error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Anomaly detection failed. Make sure usage data has been imported.'}), 500
 
 
 @admin_bp.route('/import/usage', methods=['POST'])
@@ -575,24 +604,29 @@ def generate_historical_bills():
     try:
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
-        
+
         if not user or user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
-        
+
+        # Friendly pre-check: no data imported yet
+        usage_count = db.session.query(func.count(WaterUsage.id)).scalar() or 0
+        if usage_count == 0:
+            return jsonify({'error': 'No usage data found. Import a CSV file before generating historical bills.'}), 400
+
+        customer_count = db.session.query(func.count(Customer.id)).scalar() or 0
+        if customer_count == 0:
+            return jsonify({'error': 'No customer accounts found. Import a CSV file before generating bills.'}), 400
+
         from services.billing_service import BillingService
         billing_service = BillingService()
-        
-        print("Starting historical bill generation...")
+
         result = billing_service.generate_historical_bills()
-        print(f"Bill generation completed: {result}")
-        
+
         return jsonify(result), 200
-        
+
     except Exception as e:
         print(f"Historical bill generation error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Bill generation failed. Make sure usage data has been imported first.'}), 500
 
 
 @admin_bp.route('/stats', methods=['GET'])

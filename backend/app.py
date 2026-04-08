@@ -87,24 +87,27 @@ with app.app_context():
 # Migrate existing DBs — add new columns if they don't exist yet
 def run_migrations():
     from sqlalchemy import text
-    columns = [
-        ("autopay_enabled",       "BOOLEAN DEFAULT FALSE"),
-        ("payment_method_type",   "VARCHAR(20) NULL"),
-        ("payment_method_last4",  "VARCHAR(4) NULL"),
-        ("payment_method_name",   "VARCHAR(100) NULL"),
-        ("payment_method_expiry", "VARCHAR(5) NULL"),
+
+    # (table_name, column_name, column_definition)
+    migrations = [
+        ("customers", "autopay_enabled",       "BOOLEAN DEFAULT FALSE"),
+        ("customers", "payment_method_type",   "VARCHAR(20) NULL"),
+        ("customers", "payment_method_last4",  "VARCHAR(4) NULL"),
+        ("customers", "payment_method_name",   "VARCHAR(100) NULL"),
+        ("customers", "payment_method_expiry", "VARCHAR(5) NULL"),
+        ("users",     "invite_token",          "VARCHAR(100) NULL"),
     ]
     try:
         with db.engine.connect() as conn:
-            for col_name, col_def in columns:
+            for table_name, col_name, col_def in migrations:
                 exists = conn.execute(text(
                     "SELECT COUNT(*) FROM information_schema.columns "
                     "WHERE table_schema = DATABASE() "
-                    "AND table_name = 'customers' "
+                    "AND table_name = :tbl "
                     "AND column_name = :col"
-                ), {"col": col_name}).scalar()
+                ), {"tbl": table_name, "col": col_name}).scalar()
                 if not exists:
-                    conn.execute(text(f"ALTER TABLE customers ADD COLUMN {col_name} {col_def}"))
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}"))
             conn.commit()
         print("Migrations complete.")
     except Exception as e:

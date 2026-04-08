@@ -7,9 +7,11 @@ function AdminDashboard() {
   const [detectingAnomalies, setDetectingAnomalies] = useState(false);
   const [generatingBills, setGeneratingBills] = useState(false);
   const [result, setResult] = useState(null);
+  const [importError, setImportError] = useState(null);
   const [anomalyResult, setAnomalyResult] = useState(null);
+  const [anomalyError, setAnomalyError] = useState(null);
   const [billResult, setBillResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [billRunError, setBillRunError] = useState(null);
   const [charges, setCharges] = useState([]);
   const [chargesLoading, setChargesLoading] = useState(false);
   const [chargesError, setChargesError] = useState(null);
@@ -168,18 +170,18 @@ function AdminDashboard() {
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
-    setError(null);
+    setImportError(null);
     setResult(null);
   };
 
   const handleImport = async () => {
     if (!file) {
-      setError('Please select a file first');
+      setImportError('Please select a file first');
       return;
     }
 
     setImporting(true);
-    setError(null);
+    setImportError(null);
     setResult(null);
 
     try {
@@ -191,7 +193,7 @@ function AdminDashboard() {
       setFile(null);
       document.getElementById('file-input').value = '';
     } catch (err) {
-      setError(err.response?.data?.error || 'Import failed');
+      setImportError(err.response?.data?.error || 'Import failed');
     } finally {
       setImporting(false);
     }
@@ -199,14 +201,14 @@ function AdminDashboard() {
 
   const handleDetectAnomalies = async () => {
     setDetectingAnomalies(true);
-    setError(null);
+    setAnomalyError(null);
     setAnomalyResult(null);
 
     try {
       const response = await detectAnomalies();
       setAnomalyResult(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Anomaly detection failed');
+      setAnomalyError(err.response?.data?.error || 'Anomaly detection failed');
     } finally {
       setDetectingAnomalies(false);
     }
@@ -214,14 +216,14 @@ function AdminDashboard() {
 
   const handleGenerateBills = async () => {
     setGeneratingBills(true);
-    setError(null);
+    setBillRunError(null);
     setBillResult(null);
 
     try {
       const response = await generateHistoricalBills();
       setBillResult(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Bill generation failed');
+      setBillRunError(err.response?.data?.error || 'Bill generation failed');
     } finally {
       setGeneratingBills(false);
     }
@@ -291,9 +293,9 @@ function AdminDashboard() {
     <div>
       <h1 className="text-3xl font-bold text-hydro-deep-aqua mb-6" style={{ letterSpacing: '-0.03em' }}>Admin Dashboard</h1>
 
-      {error && (
+      {importError && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+          {importError}
         </div>
       )}
 
@@ -445,12 +447,20 @@ function AdminDashboard() {
             Run ML-based anomaly detection on all customer usage data to identify spikes, leaks, and unusual patterns.
           </p>
 
+          {anomalyError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
+              {anomalyError}
+            </div>
+          )}
+
           {anomalyResult && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-              <p className="font-semibold">{anomalyResult.message}</p>
-              <p className="text-sm mt-1">
-                Detected {anomalyResult.anomalies?.length || 0} anomalies across all customers
-              </p>
+            <div className={`px-4 py-3 rounded mb-4 border ${anomalyResult.no_data ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-green-100 border-green-400 text-green-700'}`}>
+              <p className="font-semibold text-sm">{anomalyResult.message}</p>
+              {!anomalyResult.no_data && (
+                <p className="text-sm mt-1">
+                  {anomalyResult.anomalies?.length || 0} anomal{anomalyResult.anomalies?.length === 1 ? 'y' : 'ies'} flagged
+                </p>
+              )}
             </div>
           )}
 
@@ -486,9 +496,14 @@ function AdminDashboard() {
           <p className="text-sm text-gray-500 mb-4">Periodic maintenance tasks — run as needed.</p>
 
           <div className="space-y-3">
+            {anomalyError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
+                {anomalyError}
+              </div>
+            )}
             {anomalyResult && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded text-sm">
-                {anomalyResult.message} — {anomalyResult.anomalies?.length || 0} anomalies found
+              <div className={`px-3 py-2 rounded text-sm border ${anomalyResult.no_data ? 'bg-yellow-50 border-yellow-300 text-yellow-800' : 'bg-green-100 border-green-400 text-green-700'}`}>
+                {anomalyResult.message}
               </div>
             )}
             <button onClick={handleDetectAnomalies} disabled={detectingAnomalies} className="btn-primary w-full">
@@ -496,6 +511,11 @@ function AdminDashboard() {
             </button>
 
             <div className="border-t pt-3">
+              {billRunError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm mb-2">
+                  {billRunError}
+                </div>
+              )}
               {billResult && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded text-sm mb-2">
                   {billResult.message} — {billResult.total_bills} bills generated
