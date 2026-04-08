@@ -86,27 +86,29 @@ with app.app_context():
 
 # Migrate existing DBs — add new columns if they don't exist yet
 def run_migrations():
-    import time
     from sqlalchemy import text
-    migrations = [
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS autopay_enabled BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_type VARCHAR(20) NULL",
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_last4 VARCHAR(4) NULL",
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_name VARCHAR(100) NULL",
-        "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_expiry VARCHAR(5) NULL",
+    columns = [
+        ("autopay_enabled",       "BOOLEAN DEFAULT FALSE"),
+        ("payment_method_type",   "VARCHAR(20) NULL"),
+        ("payment_method_last4",  "VARCHAR(4) NULL"),
+        ("payment_method_name",   "VARCHAR(100) NULL"),
+        ("payment_method_expiry", "VARCHAR(5) NULL"),
     ]
-    for attempt in range(5):
-        try:
-            with db.engine.connect() as conn:
-                for sql in migrations:
-                    conn.execute(text(sql))
-                conn.commit()
-            print("Migrations complete.")
-            return
-        except Exception as e:
-            print(f"Migration attempt {attempt + 1} failed: {e}")
-            time.sleep(3)
-    print("WARNING: Migrations did not complete after 5 attempts.")
+    try:
+        with db.engine.connect() as conn:
+            for col_name, col_def in columns:
+                exists = conn.execute(text(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() "
+                    "AND table_name = 'customers' "
+                    "AND column_name = :col"
+                ), {"col": col_name}).scalar()
+                if not exists:
+                    conn.execute(text(f"ALTER TABLE customers ADD COLUMN {col_name} {col_def}"))
+            conn.commit()
+        print("Migrations complete.")
+    except Exception as e:
+        print(f"Migration failed: {e}")
 
 with app.app_context():
     run_migrations()
