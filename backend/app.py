@@ -86,6 +86,7 @@ with app.app_context():
 
 # Migrate existing DBs — add new columns if they don't exist yet
 def run_migrations():
+    import time
     from sqlalchemy import text
     migrations = [
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS autopay_enabled BOOLEAN DEFAULT FALSE",
@@ -94,13 +95,18 @@ def run_migrations():
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_name VARCHAR(100) NULL",
         "ALTER TABLE customers ADD COLUMN IF NOT EXISTS payment_method_expiry VARCHAR(5) NULL",
     ]
-    with db.engine.connect() as conn:
-        for sql in migrations:
-            try:
-                conn.execute(text(sql))
+    for attempt in range(5):
+        try:
+            with db.engine.connect() as conn:
+                for sql in migrations:
+                    conn.execute(text(sql))
                 conn.commit()
-            except Exception:
-                pass
+            print("Migrations complete.")
+            return
+        except Exception as e:
+            print(f"Migration attempt {attempt + 1} failed: {e}")
+            time.sleep(3)
+    print("WARNING: Migrations did not complete after 5 attempts.")
 
 with app.app_context():
     run_migrations()
