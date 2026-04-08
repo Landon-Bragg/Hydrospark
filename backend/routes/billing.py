@@ -135,8 +135,9 @@ def admin_search_bills():
 
         search = request.args.get('search', '').strip()
         status = request.args.get('status', '')
+        customer_id = request.args.get('customer_id', type=int)
         page = request.args.get('page', 1, type=int)
-        per_page = 25
+        per_page = request.args.get('per_page', 25, type=int)
 
         query = (
             db.session.query(Bill, Customer, User)
@@ -144,7 +145,9 @@ def admin_search_bills():
             .join(User, Customer.user_id == User.id)
         )
 
-        if search:
+        if customer_id:
+            query = query.filter(Bill.customer_id == customer_id)
+        elif search:
             query = query.filter(
                 or_(
                     Customer.customer_name.ilike(f'%{search}%'),
@@ -166,6 +169,7 @@ def admin_search_bills():
             d['customer_email'] = u.email
             d['customer_type'] = customer.customer_type
             d['location_id'] = customer.location_id
+            d['water_status'] = customer.water_status or 'active'
             d['user_id'] = u.id
             bills.append(d)
 

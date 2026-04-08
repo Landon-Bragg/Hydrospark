@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   adminSearchBills, updateBill, sendNotification,
-  getAdminCharges, getBillingStats, generateBill,
+  getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
 } from '../services/api';
 
 const PER_PAGE = 25;
@@ -12,6 +12,15 @@ const STATUS_COLOR = {
   pending: 'bg-yellow-100 text-yellow-800',
   overdue: 'bg-red-100 text-red-700',
 };
+
+const WATER_STATUS_COLOR = {
+  active:          'bg-green-100 text-green-700',
+  'pending shutoff': 'bg-yellow-100 text-yellow-800',
+  shutoff:         'bg-red-100 text-red-700',
+};
+
+const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function BillingDashboard() {
   const [stats, setStats] = useState(null);
@@ -45,10 +54,26 @@ function BillingDashboard() {
   const [generateError, setGenerateError] = useState(null);
   const [generateSuccess, setGenerateSuccess] = useState(null);
 
+  // Customer detail panel
+  const [customerPanel, setCustomerPanel] = useState(null);
+  const [panelBills, setPanelBills] = useState([]);
+  const [panelUsage, setPanelUsage] = useState([]);
+  const [panelAlerts, setPanelAlerts] = useState([]);
+  const [panelLoading, setPanelLoading] = useState(false);
+
   useEffect(() => {
     fetchStats();
     fetchBills(1, '', '');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced search — fires 400 ms after the user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setBillsPage(1);
+      fetchBills(1, billsSearch, billsStatus);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [billsSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchStats = async () => {
     try {
@@ -66,12 +91,6 @@ function BillingDashboard() {
     } catch (e) {}
     finally { setBillsLoading(false); }
   }, []);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setBillsPage(1);
-    fetchBills(1, billsSearch, billsStatus);
-  };
 
   const handleStatusFilter = (status) => {
     setBillsStatus(status);
@@ -104,6 +123,10 @@ function BillingDashboard() {
       setBills(prev => prev.map(b => b.id === editingBill.id ? updated : b));
       setEditingBill(null);
       fetchStats();
+      // Refresh panel if open and it's the same customer
+      if (customerPanel && customerPanel.customer_id === editingBill.customer_id) {
+        refreshPanel(customerPanel);
+      }
     } catch (err) {
       setBillError(err.response?.data?.error || 'Failed to save');
     } finally {
@@ -190,6 +213,53 @@ function BillingDashboard() {
     }
   };
 
+  // Customer detail panel
+  const refreshPanel = async (info) => {
+    setPanelLoading(true);
+    try {
+      const [billsRes, usageRes, alertsRes] = await Promise.all([
+        adminSearchBills({ customer_id: info.customer_id, per_page: 50 }),
+        getUsage({ customer_id: info.customer_id }),
+        getAlerts({ customer_id: info.customer_id }),
+      ]);
+
+      setPanelBills(billsRes.data.bills || []);
+
+      // Aggregate daily usage into monthly totals
+      const usageData = usageRes.data.usage || [];
+      const monthMap = {};
+      usageData.forEach(u => {
+        const key = `${u.year}-${String(u.month).padStart(2, '0')}`;
+        if (!monthMap[key]) monthMap[key] = { year: u.year, month: u.month, total: 0 };
+        monthMap[key].total += parseFloat(u.daily_usage_ccf);
+      });
+      const monthly = Object.values(monthMap)
+        .sort((a, b) => b.year - a.year || b.month - a.month)
+        .slice(0, 6);
+      setPanelUsage(monthly);
+
+      setPanelAlerts((alertsRes.data.alerts || []).slice(0, 5));
+    } catch (e) {}
+    finally { setPanelLoading(false); }
+  };
+
+  const openCustomerPanel = (bill) => {
+    const info = {
+      customer_id: bill.customer_id,
+      customer_name: bill.customer_name,
+      customer_email: bill.customer_email,
+      customer_type: bill.customer_type,
+      location_id: bill.location_id,
+      water_status: bill.water_status || 'active',
+      user_id: bill.user_id,
+    };
+    setCustomerPanel(info);
+    setPanelBills([]);
+    setPanelUsage([]);
+    setPanelAlerts([]);
+    refreshPanel(info);
+  };
+
   const totalPages = Math.ceil(billsTotal / PER_PAGE);
 
   return (
@@ -233,7 +303,7 @@ function BillingDashboard() {
       {/* Bills Table */}
       <div className="card">
         <div className="flex flex-col sm:flex-row gap-3 mb-5">
-          <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+          <div className="flex gap-2 flex-1">
             <input
               type="text"
               value={billsSearch}
@@ -241,14 +311,7 @@ function BillingDashboard() {
               placeholder="Search by customer name, email, or location ID…"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
             />
-            <button
-              type="submit"
-              className="text-sm font-medium px-4 py-2 rounded-lg text-white"
-              style={{ background: '#0A4C78' }}
-            >
-              Search
-            </button>
-          </form>
+          </div>
           <select
             value={billsStatus}
             onChange={e => handleStatusFilter(e.target.value)}
@@ -284,7 +347,12 @@ function BillingDashboard() {
                   {bills.map(bill => (
                     <tr key={bill.id} className="border-t hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-gray-800">{bill.customer_name}</p>
+                        <button
+                          onClick={() => openCustomerPanel(bill)}
+                          className="text-left hover:underline"
+                        >
+                          <p className="text-sm font-medium text-hydro-deep-aqua">{bill.customer_name}</p>
+                        </button>
                         <p className="text-xs text-gray-400">{bill.customer_email}</p>
                         <p className="text-xs text-gray-400">{bill.location_id}</p>
                       </td>
@@ -363,6 +431,129 @@ function BillingDashboard() {
           </>
         )}
       </div>
+
+      {/* ── Customer Detail Panel ── */}
+      {customerPanel && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end"
+          style={{ background: 'rgba(0,0,0,0.35)' }}
+          onClick={() => setCustomerPanel(null)}
+        >
+          <div
+            className="bg-white h-full overflow-y-auto shadow-2xl"
+            style={{ width: '480px', maxWidth: '100vw' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div className="px-6 py-5 border-b border-gray-100" style={{ background: '#0A4C78' }}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-white font-bold text-xl">{customerPanel.customer_name}</p>
+                  <p className="text-blue-200 text-sm mt-0.5">{customerPanel.customer_email}</p>
+                </div>
+                <button
+                  onClick={() => setCustomerPanel(null)}
+                  className="text-blue-200 hover:text-white text-xl font-bold leading-none mt-0.5"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex gap-3 mt-3 flex-wrap">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white bg-opacity-20 text-white font-medium">
+                  {customerPanel.customer_type}
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white bg-opacity-20 text-white font-medium">
+                  {customerPanel.location_id}
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${WATER_STATUS_COLOR[customerPanel.water_status] || 'bg-gray-100 text-gray-600'}`}>
+                  {customerPanel.water_status}
+                </span>
+              </div>
+            </div>
+
+            {panelLoading ? (
+              <div className="flex justify-center py-16"><div className="hydro-spinner" /></div>
+            ) : (
+              <div className="px-6 py-5 space-y-6">
+
+                {/* Usage summary */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recent Monthly Usage</p>
+                  {panelUsage.length === 0 ? (
+                    <p className="text-sm text-gray-400">No usage data found.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {panelUsage.map(u => {
+                        const maxUsage = Math.max(...panelUsage.map(x => x.total));
+                        const pct = maxUsage > 0 ? (u.total / maxUsage) * 100 : 0;
+                        return (
+                          <div key={`${u.year}-${u.month}`}>
+                            <div className="flex justify-between text-xs text-gray-600 mb-1">
+                              <span>{MONTH_NAMES[u.month]} {u.year}</span>
+                              <span className="font-semibold">{u.total.toFixed(1)} CCF</span>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: `${pct}%`, background: '#0A4C78' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Alerts */}
+                {panelAlerts.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recent Alerts</p>
+                    <div className="space-y-2">
+                      {panelAlerts.map((a, i) => (
+                        <div key={i} className="flex justify-between items-center text-sm p-2 rounded-lg bg-red-50">
+                          <span className="text-red-700 font-medium capitalize">{a.alert_type}</span>
+                          <span className="text-xs text-gray-400">{a.alert_date}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bills */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Bill History</p>
+                  {panelBills.length === 0 ? (
+                    <p className="text-sm text-gray-400">No bills found.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {panelBills.map(b => (
+                        <div key={b.id} className="flex justify-between items-center p-3 rounded-lg border border-gray-100 hover:bg-gray-50">
+                          <div>
+                            <p className="text-sm text-gray-700">
+                              {b.billing_period_start} → {b.billing_period_end}
+                            </p>
+                            <p className="text-xs text-gray-400">Due {b.due_date}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-hydro-deep-aqua">
+                              ${parseFloat(b.total_amount).toFixed(2)}
+                            </p>
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${STATUS_COLOR[b.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {b.status.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Edit Bill Modal */}
       {editingBill && (
