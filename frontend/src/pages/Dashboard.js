@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUsageSummary, getAlerts, getForecasts, getZipAverages, getAdminStats, getWeatherForecast, getBills } from '../services/api';
+import {
+  getUsageSummary, getUsage, getAlerts, getForecasts,
+  getZipAverages, getAdminStats, getWeatherForecast, getBills,
+} from '../services/api';
 
-const TYPE_COLORS = {
-  Residential: 'bg-blue-50 border-blue-200 text-blue-800',
-  Municipal: 'bg-green-50 border-green-200 text-green-800',
-  Commercial: 'bg-purple-50 border-purple-200 text-purple-800',
-};
+const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function Dashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [forecasts, setForecasts] = useState([]);
-  const [zipAverages, setZipAverages] = useState(null); // { zip_code, averages: [] }
+  const [zipAverages, setZipAverages] = useState(null);
   const [adminStats, setAdminStats] = useState(null);
   const [weather, setWeather] = useState(null);
   const [unpaidBills, setUnpaidBills] = useState([]);
+  const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -36,26 +37,39 @@ function Dashboard() {
       setLoading(true);
       setError(null);
 
-      // For customers, load their data
       if (user?.role === 'customer') {
-        const [summaryRes, alertsRes, forecastsRes, zipRes, billsRes] = await Promise.all([
+        const [summaryRes, usageRes, alertsRes, forecastsRes, zipRes, billsRes] = await Promise.all([
           getUsageSummary().catch(() => ({ data: { summary: null } })),
+          getUsage().catch(() => ({ data: { usage: [] } })),
           getAlerts({ status: 'new' }).catch(() => ({ data: { alerts: [] } })),
           getForecasts().catch(() => ({ data: { forecasts: [] } })),
           getZipAverages().catch(() => ({ data: { zip_code: null, averages: [] } })),
           getBills().catch(() => ({ data: { bills: [] } })),
         ]);
+
         setSummary(summaryRes.data.summary);
         setAlerts(alertsRes.data.alerts || []);
         setForecasts(forecastsRes.data.forecasts?.slice(0, 5) || []);
-        if (zipRes.data.zip_code) {
-          setZipAverages(zipRes.data);
-        }
-        const unpaid = (billsRes.data.bills || []).filter(b => b.status === 'pending' || b.status === 'overdue');
+        if (zipRes.data.zip_code) setZipAverages(zipRes.data);
+
+        const unpaid = (billsRes.data.bills || []).filter(
+          b => b.status === 'pending' || b.status === 'overdue'
+        );
         setUnpaidBills(unpaid);
-      }
-      // For admin/billing, load system stats
-      else {
+
+        // Build monthly usage trend from daily records
+        const usageData = usageRes.data.usage || [];
+        const monthMap = {};
+        usageData.forEach(u => {
+          const key = `${u.year}-${String(u.month).padStart(2, '0')}`;
+          if (!monthMap[key]) monthMap[key] = { year: u.year, month: u.month, total: 0 };
+          monthMap[key].total += parseFloat(u.daily_usage_ccf);
+        });
+        const trend = Object.values(monthMap)
+          .sort((a, b) => a.year - b.year || a.month - b.month)
+          .slice(-8);
+        setMonthlyTrend(trend);
+      } else {
         setSummary(null);
         setAlerts([]);
         setForecasts([]);
@@ -63,7 +77,6 @@ function Dashboard() {
         setAdminStats(statsRes.data);
       }
     } catch (err) {
-      console.error('Failed to load dashboard data', err);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -77,7 +90,7 @@ function Dashboard() {
     </div>
   );
 
-  // Admin Dashboard
+  // ── Admin/Billing Dashboard ────────────────────────────────────────────────
   if (user?.role === 'admin' || user?.role === 'billing') {
     return (
       <div>
@@ -85,7 +98,7 @@ function Dashboard() {
           <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Admin Dashboard</h1>
           <p className="text-sm text-gray-400 mt-1">System overview and quick actions</p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
             <h3 className="text-lg font-semibold mb-2">Total Records</h3>
@@ -94,7 +107,6 @@ function Dashboard() {
             </p>
             <p className="text-sm mt-2">Water usage records imported</p>
           </div>
-
           <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
             <h3 className="text-lg font-semibold mb-2">Total Accounts</h3>
             <p className="text-3xl font-bold">
@@ -102,7 +114,6 @@ function Dashboard() {
             </p>
             <p className="text-sm mt-2">Unique location accounts</p>
           </div>
-
           <div className="card bg-gradient-to-br from-teal-500 to-teal-600 text-white">
             <h3 className="text-lg font-semibold mb-2">Unique Customers</h3>
             <p className="text-3xl font-bold">
@@ -110,13 +121,11 @@ function Dashboard() {
             </p>
             <p className="text-sm mt-2">Distinct customer names</p>
           </div>
-
           <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
             <h3 className="text-lg font-semibold mb-2">Date Range</h3>
             <p className="text-xl font-bold">
               {adminStats?.min_year && adminStats?.max_year
-                ? `${adminStats.min_year} – ${adminStats.max_year}`
-                : '—'}
+                ? `${adminStats.min_year} – ${adminStats.max_year}` : '—'}
             </p>
             <p className="text-sm mt-2">
               {adminStats?.min_year && adminStats?.max_year
@@ -141,7 +150,6 @@ function Dashboard() {
               </button>
             </div>
           </div>
-
           <div className="card">
             <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">System Status</h2>
             <div className="space-y-3">
@@ -164,19 +172,43 @@ function Dashboard() {
     );
   }
 
-  // Customer Dashboard
+  // ── Customer Dashboard ─────────────────────────────────────────────────────
   const waterStatus = user?.customer?.water_status;
+  const customerType = user?.customer?.customer_type;
+  const ratePerCcf = summary?.rate_per_ccf || 5.72;
+  const totalCcf = summary?.total_usage_ccf || 0;
+  const avgDailyCcf = summary?.average_daily_ccf || 0;
+  const estimatedCost = summary?.estimated_cost ?? (totalCcf * ratePerCcf);
+
+  // Neighborhood comparison — match user's type only
+  const myZipStat = zipAverages?.averages?.find(a => a.customer_type === customerType);
+  const neighborAvgCcf = myZipStat?.avg_monthly_usage_ccf || 0;
+  const neighborAvgBill = myZipStat?.avg_monthly_bill || 0;
+  const neighborCount = myZipStat?.customer_count || 0;
+
+  // Comparison % vs neighbors (positive = using more)
+  const comparisonPct = neighborAvgCcf > 0
+    ? Math.round(((totalCcf - neighborAvgCcf) / neighborAvgCcf) * 100)
+    : null;
+
+  // Bar chart helpers
+  const trendMax = monthlyTrend.length > 0 ? Math.max(...monthlyTrend.map(m => m.total)) : 1;
+  const latestMonth = monthlyTrend[monthlyTrend.length - 1];
+
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>
-          {user?.customer?.customer_name ? `Welcome, ${user.customer.customer_name.split(' ')[0]}` : 'Dashboard'}
+          {user?.customer?.customer_name
+            ? `Welcome, ${user.customer.customer_name.split(' ')[0]}`
+            : 'Dashboard'}
         </h1>
-        {user?.customer?.customer_type && (
-          <p className="text-sm text-gray-400 mt-1">{user.customer.customer_type} account</p>
+        {customerType && (
+          <p className="text-sm text-gray-400 mt-1">{customerType} account</p>
         )}
       </div>
 
+      {/* ── Service status banners ── */}
       {waterStatus === 'shutoff' && (
         <div className="mb-6 rounded-xl border-2 border-red-400 bg-red-50 p-5">
           <div className="flex items-start gap-3">
@@ -184,10 +216,10 @@ function Dashboard() {
             <div>
               <p className="text-lg font-bold text-red-700">Water Service Suspended</p>
               <p className="text-sm text-red-600 mt-1">
-                Your water service has been shut off due to an outstanding balance on your account.
-                Please pay your overdue bills and contact us immediately to restore service.
+                Your water service has been shut off due to an outstanding balance.
+                Please pay your overdue bills and contact us to restore service.
               </p>
-              <a href="/bills" className="inline-block mt-3 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+              <a href="/pay" className="inline-block mt-3 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
                 View & Pay Bills
               </a>
             </div>
@@ -203,9 +235,9 @@ function Dashboard() {
               <p className="text-lg font-bold text-yellow-800">Water Shutoff Notice</p>
               <p className="text-sm text-yellow-700 mt-1">
                 Your account has an overdue balance. If payment is not received, your water service
-                will be shut off. Please pay your outstanding bills as soon as possible to avoid interruption.
+                will be shut off. Please pay your outstanding bills as soon as possible.
               </p>
-              <a href="/bills" className="inline-block mt-3 text-sm font-semibold text-white bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded">
+              <a href="/pay" className="inline-block mt-3 text-sm font-semibold text-white bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded">
                 View & Pay Bills
               </a>
             </div>
@@ -229,18 +261,13 @@ function Dashboard() {
                     : `You have ${pending.length} bill${pending.length > 1 ? 's' : ''} due`}
                 </p>
                 <p className={`text-sm mt-1 ${isOverdue ? 'text-red-600' : 'text-yellow-700'}`}>
-                  Total outstanding balance: <strong>${totalOwed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  Total outstanding: <strong>${totalOwed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                   {overdue.length > 0 && pending.length > 0 && (
                     <span className="ml-2 text-xs">({overdue.length} overdue · {pending.length} pending)</span>
                   )}
                 </p>
-                {isOverdue && (
-                  <p className="text-xs text-red-500 mt-1">
-                    Accounts with unpaid overdue bills may be subject to service interruption.
-                  </p>
-                )}
                 <a
-                  href="/bills"
+                  href="/pay"
                   className={`inline-block mt-3 text-sm font-semibold text-white px-4 py-2 rounded ${isOverdue ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-600 hover:bg-yellow-700'}`}
                 >
                   View & Pay Bills →
@@ -256,58 +283,179 @@ function Dashboard() {
           {error}
         </div>
       )}
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
-          <h3 className="text-lg font-semibold mb-2">Total Usage (30 days)</h3>
-          <p className="text-3xl font-bold">{summary?.total_usage_ccf?.toFixed(2) || '0.00'} CCF</p>
+
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Usage card */}
+        <div className="card" style={{ borderLeft: '4px solid #0A4C78' }}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Usage — Last 30 Days</p>
+          <p className="text-3xl font-bold text-hydro-deep-aqua">{totalCcf.toFixed(1)} <span className="text-lg font-semibold">CCF</span></p>
+          <p className="text-sm text-gray-500 mt-1">≈ {Math.round(totalCcf * 748).toLocaleString()} gallons</p>
+          {estimatedCost > 0 && (
+            <p className="text-sm font-semibold text-gray-700 mt-0.5">
+              Est. ${estimatedCost.toFixed(2)} this period
+            </p>
+          )}
         </div>
-        
-        <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
-          <h3 className="text-lg font-semibold mb-2">Average Daily</h3>
-          <p className="text-3xl font-bold">{summary?.average_daily_ccf?.toFixed(2) || '0.00'} CCF</p>
+
+        {/* Daily average card */}
+        <div className="card" style={{ borderLeft: '4px solid #22c55e' }}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Daily Average</p>
+          <p className="text-3xl font-bold text-green-700">{avgDailyCcf.toFixed(2)} <span className="text-lg font-semibold">CCF</span></p>
+          <p className="text-sm text-gray-500 mt-1">≈ {Math.round(avgDailyCcf * 748)} gallons/day</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            ≈ ${(avgDailyCcf * ratePerCcf).toFixed(2)}/day at ${ratePerCcf.toFixed(2)}/CCF
+          </p>
         </div>
-        
-        <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white">
-          <h3 className="text-lg font-semibold mb-2">Active Alerts</h3>
-          <p className="text-3xl font-bold">{alerts.length}</p>
+
+        {/* Alerts card */}
+        <div className="card" style={{ borderLeft: `4px solid ${alerts.length > 0 ? '#ef4444' : '#e5e7eb'}` }}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Active Alerts</p>
+          <p className={`text-3xl font-bold ${alerts.length > 0 ? 'text-red-600' : 'text-gray-400'}`}>{alerts.length}</p>
+          {alerts.length > 0 ? (
+            <p className="text-sm text-red-500 mt-1">Unusual usage detected — see below</p>
+          ) : (
+            <p className="text-sm text-gray-400 mt-1">No unusual activity detected</p>
+          )}
+          <a href="/usage" className="text-xs text-hydro-spark-blue underline mt-1 block">View usage history →</a>
         </div>
       </div>
 
-      {zipAverages && zipAverages.averages.length > 0 && (
+      {/* ── Monthly usage trend bar chart ── */}
+      {monthlyTrend.length > 1 && (
         <div className="card mb-6">
-          <h2 className="text-xl font-bold text-hydro-deep-aqua mb-1">
-            Neighborhood Comparison
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Average monthly water bill for customers in ZIP code <strong>{zipAverages.zip_code}</strong>, by account type.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {['Residential', 'Municipal', 'Commercial'].map((type) => {
-              const stat = zipAverages.averages.find((a) => a.customer_type === type);
-              if (!stat) return null;
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-hydro-deep-aqua">Your Usage Over Time</h2>
+              <p className="text-sm text-gray-400 mt-0.5">Monthly water consumption in CCF (hundred cubic feet)</p>
+            </div>
+            <a href="/usage" className="text-xs text-hydro-spark-blue underline mt-1">Full history →</a>
+          </div>
+
+          <div className="flex items-end gap-2" style={{ height: '120px' }}>
+            {monthlyTrend.map((m, i) => {
+              const isLatest = i === monthlyTrend.length - 1;
+              const pct = trendMax > 0 ? (m.total / trendMax) * 100 : 0;
               return (
-                <div
-                  key={type}
-                  className={`rounded-lg border p-4 ${TYPE_COLORS[type] || 'bg-gray-50 border-gray-200 text-gray-800'}`}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-wide mb-2">{type}</p>
-                  <p className="text-2xl font-bold">
-                    ${stat.avg_monthly_bill.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-sm mt-1">avg monthly bill</p>
-                  <p className="text-sm mt-1">
-                    {stat.avg_monthly_usage_ccf.toFixed(2)} CCF avg usage
-                  </p>
-                  <p className="text-xs mt-2 opacity-70">{stat.customer_count} customer{stat.customer_count !== 1 ? 's' : ''}</p>
+                <div key={`${m.year}-${m.month}`} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                  <span className="text-xs font-semibold text-gray-600"
+                    style={{ fontSize: '10px', opacity: isLatest ? 1 : 0.6 }}>
+                    {m.total.toFixed(1)}
+                  </span>
+                  <div
+                    style={{
+                      height: `${Math.max(pct, 4)}%`,
+                      background: isLatest ? '#0A4C78' : 'rgba(10,76,120,0.25)',
+                      borderRadius: '4px 4px 0 0',
+                      width: '100%',
+                      transition: 'height 0.3s ease',
+                    }}
+                  />
                 </div>
               );
             })}
           </div>
+
+          {/* X-axis labels */}
+          <div className="flex gap-2 mt-1">
+            {monthlyTrend.map((m, i) => {
+              const isLatest = i === monthlyTrend.length - 1;
+              return (
+                <div key={`lbl-${m.year}-${m.month}`} className="flex-1 text-center">
+                  <span className="text-xs text-gray-400" style={{ opacity: isLatest ? 1 : 0.6, fontSize: '10px' }}>
+                    {MONTH_NAMES[m.month]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {latestMonth && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex gap-4 text-sm text-gray-500 flex-wrap">
+              <span>
+                <span className="font-semibold text-hydro-deep-aqua">{MONTH_NAMES[latestMonth.month]} {latestMonth.year}</span>
+                {' '}(most recent): {latestMonth.total.toFixed(1)} CCF
+                {' '}≈ {Math.round(latestMonth.total * 748).toLocaleString()} gallons
+              </span>
+              {summary?.rate_per_ccf && (
+                <span>Est. <strong>${(latestMonth.total * summary.rate_per_ccf).toFixed(2)}</strong></span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Weather Widget */}
+      {/* ── Neighborhood comparison (reworked) ── */}
+      {myZipStat && neighborAvgCcf > 0 && (
+        <div className="card mb-6">
+          <h2 className="text-xl font-bold text-hydro-deep-aqua mb-1">How You Compare to Your Neighborhood</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            {customerType} customers in ZIP code <strong>{zipAverages.zip_code}</strong>
+            {neighborCount > 1 && ` · ${neighborCount} accounts`}
+          </p>
+
+          {/* Comparison bars */}
+          <div className="space-y-4 mb-4">
+            {/* Your usage bar */}
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-semibold text-hydro-deep-aqua">Your usage (30 days)</span>
+                <span className="font-bold text-hydro-deep-aqua">{totalCcf.toFixed(1)} CCF</span>
+              </div>
+              <div className="h-5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min((totalCcf / Math.max(totalCcf, neighborAvgCcf)) * 100, 100)}%`,
+                    background: '#0A4C78',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Neighbor avg bar */}
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600">Neighborhood average</span>
+                <span className="font-semibold text-gray-600">{neighborAvgCcf.toFixed(1)} CCF</span>
+              </div>
+              <div className="h-5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min((neighborAvgCcf / Math.max(totalCcf, neighborAvgCcf)) * 100, 100)}%`,
+                    background: 'rgba(10,76,120,0.3)',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Plain-English verdict */}
+          {comparisonPct !== null && (
+            <div className={`rounded-lg px-4 py-3 text-sm font-medium ${
+              comparisonPct <= -10
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : comparisonPct >= 20
+                ? 'bg-red-50 text-red-800 border border-red-200'
+                : 'bg-blue-50 text-blue-800 border border-blue-200'
+            }`}>
+              {comparisonPct <= -10
+                ? `You use ${Math.abs(comparisonPct)}% less than similar customers in your area. Great work!`
+                : comparisonPct >= 20
+                ? `You use ${comparisonPct}% more than similar customers in your area. Consider checking for leaks or reducing usage.`
+                : `Your usage is in line with similar customers in your area (within ${Math.abs(comparisonPct)}%).`}
+              {neighborAvgBill > 0 && (
+                <span className="block mt-1 text-xs opacity-70">
+                  Neighborhood avg bill: ${neighborAvgBill.toFixed(2)}/month
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Weather Widget ── */}
       {weather && weather.days && weather.days.length > 0 && (() => {
         const today = weather.days[0];
         const colorMap = {
@@ -342,7 +490,13 @@ function Dashboard() {
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {next5.map((day) => {
                     const d = new Date(day.date + 'T12:00:00');
-                    const badgeMap = { red: 'bg-red-100 text-red-700', orange: 'bg-orange-100 text-orange-700', teal: 'bg-teal-100 text-teal-700', blue: 'bg-blue-100 text-blue-700', green: 'bg-green-100 text-green-700' };
+                    const badgeMap = {
+                      red: 'bg-red-100 text-red-700',
+                      orange: 'bg-orange-100 text-orange-700',
+                      teal: 'bg-teal-100 text-teal-700',
+                      blue: 'bg-blue-100 text-blue-700',
+                      green: 'bg-green-100 text-green-700',
+                    };
                     return (
                       <div key={day.date} className="text-center flex-shrink-0 w-16">
                         <p className="text-xs text-gray-500">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
@@ -364,21 +518,23 @@ function Dashboard() {
         );
       })()}
 
+      {/* ── Alerts + Forecasts ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">
           <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">Recent Alerts</h2>
           {alerts.length === 0 ? (
-            <p className="text-gray-500">No active alerts</p>
+            <p className="text-gray-500 text-sm">No active alerts — your usage looks normal.</p>
           ) : (
             <div className="space-y-3">
               {alerts.slice(0, 3).map(alert => (
                 <div key={alert.id} className="p-3 bg-red-50 border-l-4 border-red-500 rounded">
                   <div className="flex justify-between">
-                    <span className="font-semibold text-red-700">{alert.alert_type}</span>
+                    <span className="font-semibold text-red-700 capitalize">{alert.alert_type}</span>
                     <span className="text-sm text-gray-600">{alert.alert_date}</span>
                   </div>
                   <p className="text-sm text-gray-700 mt-1">
-                    Usage: {alert.usage_ccf} CCF ({alert.deviation_percentage}% deviation)
+                    {parseFloat(alert.usage_ccf).toFixed(2)} CCF used
+                    {alert.deviation_percentage != null && ` — ${Math.round(alert.deviation_percentage)}% above expected`}
                   </p>
                 </div>
               ))}
@@ -390,11 +546,8 @@ function Dashboard() {
           <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">Upcoming Forecast</h2>
           {forecasts.length === 0 ? (
             <div>
-              <p className="text-gray-500 mb-4">No forecasts available</p>
-              <button 
-                className="btn-primary"
-                onClick={() => window.location.href = '/forecasts'}
-              >
+              <p className="text-gray-500 text-sm mb-4">No forecasts available yet.</p>
+              <button className="btn-primary" onClick={() => window.location.href = '/forecasts'}>
                 Generate Forecast
               </button>
             </div>
@@ -402,15 +555,23 @@ function Dashboard() {
             <div className="space-y-3">
               {forecasts.slice(0, 3).map(forecast => (
                 <div key={forecast.id} className="p-3 bg-hydro-sky-blue rounded">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-hydro-deep-aqua">{forecast.forecast_date}</span>
-                    <span className="text-hydro-charcoal">{forecast.predicted_usage_ccf.toFixed(2)} CCF</span>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-hydro-deep-aqua text-sm">{forecast.forecast_date}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {parseFloat(forecast.predicted_usage_ccf).toFixed(2)} CCF
+                        {' '}≈ {Math.round(parseFloat(forecast.predicted_usage_ccf) * 748).toLocaleString()} gal
+                      </p>
+                    </div>
+                    <p className="text-base font-bold text-hydro-deep-aqua">
+                      ${parseFloat(forecast.predicted_amount).toFixed(2)}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Est. Amount: ${forecast.predicted_amount.toFixed(2)}
-                  </p>
                 </div>
               ))}
+              <a href="/forecasts" className="block text-center text-xs text-hydro-spark-blue underline pt-1">
+                See full forecast →
+              </a>
             </div>
           )}
         </div>
