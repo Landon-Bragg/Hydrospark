@@ -367,7 +367,7 @@ def chat_message():
         # ReAct loop — max 4 tool calls
         for _ in range(4):
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama3-groq-8b-8192-tool-use-preview",
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
@@ -375,9 +375,6 @@ def chat_message():
             )
 
             choice = response.choices[0]
-
-            if choice.finish_reason == "stop":
-                return jsonify({"response": choice.message.content or ""})
 
             if choice.finish_reason == "tool_calls":
                 messages.append(choice.message)
@@ -390,10 +387,17 @@ def chat_message():
                         "content": json.dumps(result),
                     })
             else:
-                break
+                # stop or anything else — return the text response
+                text = choice.message.content or ""
+                # Strip any leaked tool-call syntax the model may have emitted as text
+                import re
+                text = re.sub(r'=?</?function[^>]*>', '', text)
+                text = re.sub(r'\{["\']?name["\']?\s*:\s*["\']?\w+["\']?.*?\}', '', text, flags=re.DOTALL)
+                text = text.strip()
+                return jsonify({"response": text or "I couldn't find that information."})
 
-        final = response.choices[0].message.content
-        return jsonify({"response": final or "I couldn't find that information."})
+        final = response.choices[0].message.content or "I couldn't find that information."
+        return jsonify({"response": final})
 
     except Exception as e:
         print(f"Chat error: {e}")
