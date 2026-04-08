@@ -33,6 +33,7 @@ def get_threads():
         last = messages[0] if messages else None
         threads.append({
             'customer_id': customer.id,
+            'user_id': customer.user_id,
             'customer_name': customer.customer_name,
             'location_id': customer.location_id,
             'message_count': len(messages),

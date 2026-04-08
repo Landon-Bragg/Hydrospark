@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getSupportThreads, getThreadMessages, sendToCustomer,
   getMyMessages, sendMyMessage,
-  sendNotification, getNotifications, markNotificationRead, getUsers,
+  sendNotification, getNotifications, markNotificationRead,
 } from '../services/api';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -30,7 +30,6 @@ function StaffInbox() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
-  const [users, setUsers] = useState([]);
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('');
@@ -44,7 +43,6 @@ function StaffInbox() {
 
   useEffect(() => {
     loadThreads();
-    getUsers().then(r => setUsers((r.data.users || []).filter(u => u.role === 'customer')));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -302,12 +300,16 @@ function StaffInbox() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
                 >
                   <option value="">— Select a customer —</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.first_name} {u.last_name} ({u.email})
+                  {threads.filter(t => t.user_id).map(t => (
+                    <option key={t.user_id} value={t.user_id}>
+                      {t.customer_name} ({t.location_id})
                     </option>
                   ))}
                 </select>
+                {loading && <p className="text-xs text-gray-400 mt-1">Loading customers…</p>}
+                {!loading && threads.filter(t => t.user_id).length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No customer accounts found.</p>
+                )}
               </div>
             )}
 
