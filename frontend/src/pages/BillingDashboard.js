@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   adminSearchBills, updateBill, sendNotification,
   getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
@@ -556,7 +557,7 @@ function BillingDashboard() {
       )}
 
       {/* Edit Bill Modal */}
-      {editingBill && (
+      {editingBill && createPortal(
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
           style={{ background: 'rgba(0,0,0,0.45)' }}
@@ -626,11 +627,12 @@ function BillingDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Send Reminder Modal */}
-      {remindBill && (
+      {remindBill && createPortal(
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
           style={{ background: 'rgba(0,0,0,0.45)' }}
@@ -667,11 +669,12 @@ function BillingDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Generate Bill Modal */}
-      {generateModal && (
+      {generateModal && createPortal(
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
           style={{ background: 'rgba(0,0,0,0.45)' }}
@@ -734,7 +737,8 @@ function BillingDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
