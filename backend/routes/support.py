@@ -227,6 +227,18 @@ def mark_notification_read(notif_id):
     return jsonify({'ok': True})
 
 
+@support_bp.route('/notifications/<int:notif_id>', methods=['DELETE'])
+@jwt_required()
+def delete_notification(notif_id):
+    user_id = int(get_jwt_identity())
+    notif = Notification.query.get(notif_id)
+    if not notif or notif.user_id != user_id:
+        return jsonify({'error': 'Not found'}), 404
+    db.session.delete(notif)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @support_bp.route('/notifications/unread-count', methods=['GET'])
 @jwt_required()
 def unread_count():

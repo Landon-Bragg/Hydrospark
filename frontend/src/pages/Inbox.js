@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getSupportThreads, getThreadMessages, sendToCustomer,
   getMyMessages, sendMyMessage,
-  sendNotification, getNotifications, markNotificationRead,
+  sendNotification, getNotifications, markNotificationRead, deleteNotification,
 } from '../services/api';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -398,9 +398,23 @@ function CustomerInbox() {
     }
   };
 
+  const handleDelete = async (id, e) => {
+    e?.stopPropagation();
+    try {
+      await deleteNotification(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      if (openNotif?.id === id) setOpenNotif(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleOpenNotif = (notif) => {
     setOpenNotif(notif);
-    if (!notif.is_read) handleMarkRead(notif.id);
+    if (!notif.is_read) {
+      handleMarkRead(notif.id);
+      setOpenNotif({ ...notif, is_read: true });
+    }
   };
 
   const handleSend = async () => {
@@ -476,14 +490,14 @@ function CustomerInbox() {
             </div>
           ) : (
             notifications.map(notif => (
-              <button
+              <div
                 key={notif.id}
-                onClick={() => handleOpenNotif(notif)}
-                className="card w-full text-left transition-all hover:shadow-md"
+                className="card w-full transition-all hover:shadow-md cursor-pointer"
                 style={{
                   borderLeft: notif.is_read ? '3px solid #e5e7eb' : '3px solid #0A4C78',
                   opacity: notif.is_read ? 0.7 : 1,
                 }}
+                onClick={() => handleOpenNotif(notif)}
               >
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex-1 min-w-0">
@@ -499,9 +513,18 @@ function CustomerInbox() {
                       From {notif.created_by_name || 'HydroSpark'} · {formatTime(notif.created_at)}
                     </p>
                   </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">Open →</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs text-gray-400">Open →</span>
+                    <button
+                      onClick={(e) => handleDelete(notif.id, e)}
+                      className="text-gray-300 hover:text-red-500 transition-colors p-1 rounded"
+                      title="Delete notification"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -529,7 +552,13 @@ function CustomerInbox() {
                 {openNotif.message}
               </p>
             </div>
-            <div className="px-6 pb-5 flex justify-end">
+            <div className="px-6 pb-5 flex justify-between items-center">
+              <button
+                onClick={() => handleDelete(openNotif.id)}
+                className="text-sm font-medium px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+              >
+                Delete
+              </button>
               <button
                 onClick={() => setOpenNotif(null)}
                 className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
