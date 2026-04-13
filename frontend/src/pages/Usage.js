@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill, getAlerts } from '../services/api';
+import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill, getAlerts, downloadUsage } from '../services/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell
@@ -304,6 +304,17 @@ function Usage() {
   const [anomalyAlerts, setAnomalyAlerts] = useState([]);
   const [anomalyExpanded, setAnomalyExpanded] = useState(false);
 
+  // Download modal state
+  const [showDownload, setShowDownload] = useState(false);
+  const [dlFrom, setDlFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [dlTo, setDlTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dlCustomerId, setDlCustomerId] = useState('');
+  const [dlLoading, setDlLoading] = useState(false);
+  const [dlError, setDlError] = useState(null);
+
   // Edit bill modal state (lifted here so modal renders outside .card stacking context)
   const [editingBill, setEditingBill] = useState(null);
   const [editForm, setEditForm] = useState({ total_amount: '', status: '', due_date: '' });
@@ -346,6 +357,38 @@ function Usage() {
       loadCustomerData();
     }
   }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDownload = async () => {
+    setDlLoading(true);
+    setDlError(null);
+    try {
+      const params = { start_date: dlFrom, end_date: dlTo };
+      if (isAdmin && dlCustomerId) params.customer_id = dlCustomerId;
+      const res = await downloadUsage(params);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      // Try to extract filename from Content-Disposition header
+      const cd = res.headers['content-disposition'] || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : `water_usage_${dlFrom}_${dlTo}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setShowDownload(false);
+    } catch (err) {
+      // Blob error responses need parsing
+      if (err.response?.data instanceof Blob) {
+        const text = await err.response.data.text();
+        try { setDlError(JSON.parse(text).error); } catch { setDlError('Download failed'); }
+      } else {
+        setDlError(err.response?.data?.error || 'Download failed');
+      }
+    } finally {
+      setDlLoading(false);
+    }
+  };
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -444,16 +487,27 @@ function Usage() {
         <h1 className="text-3xl font-bold text-hydro-deep-aqua">
           {isAdmin ? 'Usage Overview' : 'My Water Usage'}
         </h1>
-        <select
-          value={dateRange}
-          onChange={(e) => setDateRange(e.target.value)}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setShowDownload(true); setDlError(null); }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download CSV
+          </button>
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value)}
           className="input-field w-48"
         >
-          <option value="7">Last 7 Days</option>
-          <option value="30">Last 30 Days</option>
-          <option value="90">Last 90 Days</option>
-          <option value="365">Last Year</option>
-        </select>
+            <option value="7">Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+            <option value="365">Last Year</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -814,6 +868,144 @@ function Usage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Download CSV Modal ── */}
+      {showDownload && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => { if (!dlLoading) setShowDownload(false); }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-2 rounded-xl bg-hydro-sky-blue">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-hydro-deep-aqua" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-hydro-deep-aqua">Download Usage Data</h3>
+                <p className="text-xs text-gray-400">Day-by-day breakdown exported as CSV</p>
+              </div>
+            </div>
+
+            {dlError && (
+              <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                {dlError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Date range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">From</label>
+                  <input
+                    type="date"
+                    value={dlFrom}
+                    onChange={e => setDlFrom(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hydro-spark-blue"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">To</label>
+                  <input
+                    type="date"
+                    value={dlTo}
+                    onChange={e => setDlTo(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hydro-spark-blue"
+                  />
+                </div>
+              </div>
+
+              {/* Quick presets */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Quick select</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: 'Last 30 days', days: 30 },
+                    { label: 'Last 90 days', days: 90 },
+                    { label: 'Last 6 months', days: 180 },
+                    { label: 'Last year', days: 365 },
+                    { label: 'Last 2 years', days: 730 },
+                  ].map(({ label, days }) => (
+                    <button
+                      key={days}
+                      onClick={() => {
+                        const end = new Date();
+                        const start = new Date();
+                        start.setDate(start.getDate() - days);
+                        setDlTo(end.toISOString().split('T')[0]);
+                        setDlFrom(start.toISOString().split('T')[0]);
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-hydro-sky-blue hover:border-hydro-spark-blue transition"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Admin: optional customer filter */}
+              {isAdmin && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                    Customer (optional — leave blank for all)
+                  </label>
+                  <select
+                    value={dlCustomerId}
+                    onChange={e => setDlCustomerId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hydro-spark-blue"
+                  >
+                    <option value="">All customers</option>
+                    {allCustomers.slice().sort((a, b) => a.customer_name.localeCompare(b.customer_name)).map(c => (
+                      <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* What's included note */}
+              <div className="rounded-lg bg-gray-50 border border-gray-100 px-4 py-3 text-xs text-gray-500 space-y-1">
+                <p className="font-semibold text-gray-600">Included in export:</p>
+                <p>• Date, Usage (CCF &amp; gallons), Estimated cost</p>
+                <p>• % vs daily average, Reading type (Actual / Estimated)</p>
+                {isAdmin && <p>• Customer name, type, and location ID</p>}
+                <p>• Summary totals at the end of the file</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDownload(false)}
+                disabled={dlLoading}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDownload}
+                disabled={dlLoading || !dlFrom || !dlTo}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold transition disabled:opacity-50"
+                style={{ background: '#0A4C78' }}
+              >
+                {dlLoading ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Preparing…</>
+                ) : (
+                  <><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg> Download CSV</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {editingBill && createPortal(
