@@ -563,11 +563,17 @@ function Usage() {
                           <span className="text-sm font-semibold text-red-600">
                             {parseFloat(a.usage_ccf || 0).toFixed(1)} CCF
                           </span>
-                          {a.deviation_percentage != null && (
-                            <span className="text-xs font-bold text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
-                              +{Math.round(a.deviation_percentage)}%
-                            </span>
-                          )}
+                          {a.expected_usage_ccf != null && (() => {
+                            const diff = parseFloat(a.usage_ccf) - parseFloat(a.expected_usage_ccf);
+                            const pct = parseFloat(a.deviation_percentage);
+                            const sign = diff >= 0 ? '+' : '';
+                            return (
+                              <span className="text-xs font-bold text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded leading-tight text-center">
+                                <span className="block">{sign}{diff.toFixed(1)} CCF</span>
+                                <span className="block font-normal opacity-80">{sign}{pct.toFixed(0)}%</span>
+                              </span>
+                            );
+                          })()}
                           <span className="text-xs text-hydro-spark-blue">View →</span>
                         </div>
                       </div>

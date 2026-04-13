@@ -567,7 +567,12 @@ function Dashboard() {
                   </div>
                   <p className="text-sm text-gray-700 mt-1">
                     {parseFloat(alert.usage_ccf).toFixed(2)} CCF used
-                    {alert.deviation_percentage != null && ` — ${Math.round(alert.deviation_percentage)}% above expected`}
+                    {alert.expected_usage_ccf != null && (() => {
+                      const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
+                      const pct = parseFloat(alert.deviation_percentage);
+                      const sign = diff >= 0 ? '+' : '';
+                      return ` — ${sign}${diff.toFixed(2)} CCF (${sign}${pct.toFixed(1)}% vs expected)`;
+                    })()}
                   </p>
                 </div>
               ))}

@@ -135,9 +135,21 @@ function Alerts() {
                     </div>
                     <div>
                       <p className="text-gray-600">Deviation</p>
-                      <p className="font-semibold text-red-600">
-                        {parseFloat(alert.deviation_percentage).toFixed(1)}%
-                      </p>
+                      {(() => {
+                        const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
+                        const pct  = parseFloat(alert.deviation_percentage);
+                        const sign = diff >= 0 ? '+' : '';
+                        return (
+                          <>
+                            <p className="font-bold text-red-600">
+                              {sign}{diff.toFixed(2)} CCF
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {sign}{pct.toFixed(1)}% vs expected
+                            </p>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
