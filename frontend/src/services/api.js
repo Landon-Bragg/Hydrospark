@@ -30,6 +30,7 @@ export const getUsage = (params) => api.get('/usage', { params });
 export const getUsageSummary = (params) => api.get('/usage/summary', { params });
 export const getTopCustomers = (params) => api.get('/usage/top-customers', { params });
 export const getZipAverages = (params) => api.get('/usage/zip-averages', { params });
+export const downloadUsage = (params) => api.get('/usage/download', { params, responseType: 'blob' });
 
 // Forecasts
 export const generateForecast = (data) => api.post('/forecasts/generate', data);

@@ -2,11 +2,13 @@
 Water usage data routes
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, WaterUsage, Bill
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import csv
+import io
 
 usage_bp = Blueprint('usage', __name__)
 
@@ -236,6 +238,165 @@ def get_zip_averages():
         ]
 
         return jsonify({'zip_code': zip_code, 'averages': averages}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@usage_bp.route('/download', methods=['GET'])
+@jwt_required()
+def download_usage():
+    """Download daily water usage as CSV for a date range."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        start_date_str = request.args.get('start_date')
+        end_date_str   = request.args.get('end_date')
+
+        if not start_date_str or not end_date_str:
+            return jsonify({'error': 'start_date and end_date are required'}), 400
+
+        try:
+            start_date = datetime.fromisoformat(start_date_str).date()
+            end_date   = datetime.fromisoformat(end_date_str).date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format — use YYYY-MM-DD'}), 400
+
+        if (end_date - start_date).days > 730:
+            return jsonify({'error': 'Date range cannot exceed 2 years'}), 400
+
+        is_staff = user.role in ('admin', 'billing')
+
+        # Determine which customer(s) to include
+        customer_id_param = request.args.get('customer_id', type=int)
+        if is_staff and customer_id_param:
+            customers = Customer.query.filter_by(id=customer_id_param).all()
+        elif is_staff:
+            customers = None  # all customers
+        else:
+            if not user.customer:
+                return jsonify({'error': 'Customer profile not found'}), 404
+            customers = [user.customer]
+
+        # Build usage query
+        query = (
+            db.session.query(WaterUsage, Customer)
+            .join(Customer, Customer.id == WaterUsage.customer_id)
+            .filter(
+                WaterUsage.usage_date >= start_date,
+                WaterUsage.usage_date <= end_date,
+            )
+        )
+        if customers is not None:
+            ids = [c.id for c in customers]
+            query = query.filter(WaterUsage.customer_id.in_(ids))
+
+        rows = query.order_by(WaterUsage.usage_date.asc(), Customer.customer_name.asc()).all()
+
+        # Compute per-customer daily averages for the deviation column
+        avg_map = {}
+        for usage, customer in rows:
+            if customer.id not in avg_map:
+                avg_map[customer.id] = []
+            avg_map[customer.id].append(float(usage.daily_usage_ccf))
+        avg_by_customer = {cid: (sum(vals) / len(vals)) for cid, vals in avg_map.items()}
+
+        # Also pull billing rate per customer for estimated cost column
+        from services.billing_service import BillingService
+        bs = BillingService()
+        rate_map = {}
+        seen_customers = {customer.id: customer for _, customer in rows}
+        for cid, c in seen_customers.items():
+            try:
+                rate_map[cid] = bs._resolve_rate(c)
+            except Exception:
+                rate_map[cid] = 5.72
+
+        # Write CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Metadata header
+        generated_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+        writer.writerow(['# HydroSpark Water Usage Export'])
+        writer.writerow([f'# Period: {start_date} to {end_date}'])
+        writer.writerow([f'# Generated: {generated_at}'])
+        if not is_staff and user.customer:
+            writer.writerow([f'# Account: {user.customer.customer_name}'])
+        writer.writerow([])
+
+        # Column headers
+        if is_staff:
+            writer.writerow([
+                'Date', 'Customer Name', 'Customer Type', 'Location ID',
+                'Usage (CCF)', 'Usage (Gallons)', 'Est. Cost ($)',
+                'vs Daily Avg (%)', 'Reading Type',
+            ])
+        else:
+            writer.writerow([
+                'Date',
+                'Usage (CCF)', 'Usage (Gallons)', 'Est. Cost ($)',
+                'vs Daily Avg (%)', 'Reading Type',
+            ])
+
+        total_ccf = 0.0
+        for usage, customer in rows:
+            ccf      = float(usage.daily_usage_ccf)
+            gallons  = round(ccf * 748, 1)
+            rate     = rate_map.get(customer.id, 5.72)
+            cost     = round(ccf * rate, 2)
+            avg      = avg_by_customer.get(customer.id, ccf)
+            dev_pct  = round(((ccf - avg) / avg * 100), 1) if avg > 0 else 0.0
+            rtype    = 'Estimated' if usage.is_estimated else 'Actual'
+            total_ccf += ccf
+
+            if is_staff:
+                writer.writerow([
+                    usage.usage_date.isoformat(),
+                    customer.customer_name,
+                    customer.customer_type or '',
+                    customer.location_id or '',
+                    f'{ccf:.2f}', gallons, f'{cost:.2f}',
+                    f'{dev_pct:+.1f}', rtype,
+                ])
+            else:
+                writer.writerow([
+                    usage.usage_date.isoformat(),
+                    f'{ccf:.2f}', gallons, f'{cost:.2f}',
+                    f'{dev_pct:+.1f}', rtype,
+                ])
+
+        # Summary footer
+        writer.writerow([])
+        if rows:
+            writer.writerow(['# Summary'])
+            writer.writerow([f'# Total records: {len(rows)}'])
+            writer.writerow([f'# Total usage: {total_ccf:.2f} CCF ({round(total_ccf * 748):,} gallons)'])
+            avg_daily_overall = total_ccf / len(rows) if rows else 0
+            writer.writerow([f'# Average daily: {avg_daily_overall:.2f} CCF'])
+
+        csv_content = output.getvalue()
+        output.close()
+
+        # Filename
+        if not is_staff and user.customer:
+            name_slug = user.customer.customer_name.lower().replace(' ', '_')
+            filename  = f'water_usage_{name_slug}_{start_date}_{end_date}.csv'
+        elif is_staff and customer_id_param and customers:
+            name_slug = customers[0].customer_name.lower().replace(' ', '_')
+            filename  = f'water_usage_{name_slug}_{start_date}_{end_date}.csv'
+        else:
+            filename = f'water_usage_all_{start_date}_{end_date}.csv'
+
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Type': 'text/csv; charset=utf-8',
+            }
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
