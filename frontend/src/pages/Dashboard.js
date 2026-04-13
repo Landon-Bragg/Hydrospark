@@ -296,6 +296,9 @@ function Dashboard() {
               Est. ${estimatedCost.toFixed(2)} this period
             </p>
           )}
+          <a href="/usage" className="block text-xs font-medium text-hydro-spark-blue mt-3 pt-2.5 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View usage history →
+          </a>
         </div>
 
         {/* Daily average card */}
@@ -306,6 +309,9 @@ function Dashboard() {
           <p className="text-sm text-gray-400 mt-0.5">
             ≈ ${(avgDailyCcf * ratePerCcf).toFixed(2)}/day at ${ratePerCcf.toFixed(2)}/CCF
           </p>
+          <a href="/usage" className="block text-xs font-medium text-hydro-spark-blue mt-3 pt-2.5 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View usage history →
+          </a>
         </div>
 
         {/* Billing status card */}
@@ -339,7 +345,7 @@ function Dashboard() {
                   )}
                 </>
               )}
-              <a href="/pay" className="text-xs text-hydro-spark-blue underline mt-1 block">View bills →</a>
+              <a href="/pay" className="block text-xs font-medium text-hydro-spark-blue mt-3 pt-2.5 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">View bills →</a>
             </div>
           );
         })()}
@@ -348,12 +354,9 @@ function Dashboard() {
       {/* ── Monthly usage trend bar chart ── */}
       {monthlyTrend.length > 1 && (
         <div className="card mb-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h2 className="text-xl font-bold text-hydro-deep-aqua">Your Usage Over Time</h2>
-              <p className="text-sm text-gray-400 mt-0.5">Monthly water consumption in CCF (hundred cubic feet)</p>
-            </div>
-            <a href="/usage" className="text-xs text-hydro-spark-blue underline mt-1">Full history →</a>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-hydro-deep-aqua">Your Usage Over Time</h2>
+            <p className="text-sm text-gray-400 mt-0.5">Monthly water consumption in CCF (hundred cubic feet)</p>
           </div>
 
           <div className="flex items-end gap-2" style={{ height: '120px' }}>
@@ -406,6 +409,9 @@ function Dashboard() {
               )}
             </div>
           )}
+          <a href="/usage" className="block text-xs font-medium text-hydro-spark-blue mt-4 pt-3 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View full usage history →
+          </a>
         </div>
       )}
 
@@ -476,6 +482,9 @@ function Dashboard() {
               )}
             </div>
           )}
+          <a href="/usage" className="block text-xs font-medium text-hydro-spark-blue mt-4 pt-3 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View detailed usage →
+          </a>
         </div>
       )}
 
@@ -533,11 +542,11 @@ function Dashboard() {
                     );
                   })}
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Full 14-day outlook on the <a href="/forecasts" className="underline text-hydro-spark-blue">Forecasts page</a>.
-                </p>
               </div>
             </div>
+          <a href="/forecasts" className="block text-xs font-medium text-hydro-spark-blue mt-4 pt-3 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View 14-day forecast →
+          </a>
           </div>
         );
       })()}
@@ -564,17 +573,15 @@ function Dashboard() {
               ))}
             </div>
           )}
+          <a href="/alerts" className="block text-xs font-medium text-hydro-spark-blue mt-4 pt-3 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View all alerts →
+          </a>
         </div>
 
         <div className="card">
           <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">Upcoming Forecast</h2>
           {forecasts.length === 0 ? (
-            <div>
-              <p className="text-gray-500 text-sm mb-4">No forecasts available yet.</p>
-              <button className="btn-primary" onClick={() => window.location.href = '/forecasts'}>
-                Generate Forecast
-              </button>
-            </div>
+            <p className="text-gray-500 text-sm">No forecasts available yet.</p>
           ) : (
             <div className="space-y-3">
               {forecasts.slice(0, 3).map(forecast => (
@@ -593,11 +600,11 @@ function Dashboard() {
                   </div>
                 </div>
               ))}
-              <a href="/forecasts" className="block text-center text-xs text-hydro-spark-blue underline pt-1">
-                See full forecast →
-              </a>
             </div>
           )}
+          <a href="/forecasts" className="block text-xs font-medium text-hydro-spark-blue mt-4 pt-3 border-t border-gray-100 hover:text-hydro-deep-aqua transition-colors">
+            View full forecast →
+          </a>
         </div>
       </div>
     </div>
