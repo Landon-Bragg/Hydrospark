@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
+import {
   adminSearchBills, updateBill, refundBill, sendNotification,
   getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
 } from '../services/api';
@@ -34,6 +37,9 @@ function BillingDashboard() {
   const [billsSearch, setBillsSearch] = useState('');
   const [billsStatus, setBillsStatus] = useState('');
   const [billsLoading, setBillsLoading] = useState(false);
+  const [billsDateFrom, setBillsDateFrom] = useState('');
+  const [billsDateTo, setBillsDateTo] = useState('');
+  const [billsCustomerType, setBillsCustomerType] = useState('');
 
   // Edit bill modal
   const [editingBill, setEditingBill] = useState(null);
@@ -64,9 +70,11 @@ function BillingDashboard() {
   // Customer detail panel
   const [customerPanel, setCustomerPanel] = useState(null);
   const [panelBills, setPanelBills] = useState([]);
-  const [panelUsage, setPanelUsage] = useState([]);
+  const [panelUsage, setPanelUsage] = useState([]);   // all months, sorted desc
   const [panelAlerts, setPanelAlerts] = useState([]);
   const [panelLoading, setPanelLoading] = useState(false);
+  const [panelRange, setPanelRange] = useState(6);    // months to show: 3 | 6 | 12 | 0 = all
+  const [panelMetric, setPanelMetric] = useState('ccf'); // 'ccf' | 'amount'
 
   useEffect(() => {
     fetchStats();
@@ -89,25 +97,43 @@ function BillingDashboard() {
     } catch (e) {}
   };
 
-  const fetchBills = useCallback(async (page, search, status) => {
+  const fetchBills = useCallback(async (page, search, status, dateFrom, dateTo, customerType) => {
     setBillsLoading(true);
     try {
-      const res = await adminSearchBills({ page, search, status });
+      const res = await adminSearchBills({
+        page, search, status,
+        date_from: dateFrom ?? billsDateFrom,
+        date_to:   dateTo   ?? billsDateTo,
+        customer_type: customerType ?? billsCustomerType,
+      });
       setBills(res.data.bills || []);
       setBillsTotal(res.data.total || 0);
     } catch (e) {}
     finally { setBillsLoading(false); }
-  }, []);
+  }, [billsDateFrom, billsDateTo, billsCustomerType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStatusFilter = (status) => {
     setBillsStatus(status);
     setBillsPage(1);
-    fetchBills(1, billsSearch, status);
+    fetchBills(1, billsSearch, status, billsDateFrom, billsDateTo, billsCustomerType);
+  };
+
+  const handleApplyFilters = () => {
+    setBillsPage(1);
+    fetchBills(1, billsSearch, billsStatus, billsDateFrom, billsDateTo, billsCustomerType);
+  };
+
+  const handleClearFilters = () => {
+    setBillsDateFrom('');
+    setBillsDateTo('');
+    setBillsCustomerType('');
+    setBillsPage(1);
+    fetchBills(1, billsSearch, billsStatus, '', '', '');
   };
 
   const handlePage = (newPage) => {
     setBillsPage(newPage);
-    fetchBills(newPage, billsSearch, billsStatus);
+    fetchBills(newPage, billsSearch, billsStatus, billsDateFrom, billsDateTo, billsCustomerType);
   };
 
   // Edit
@@ -261,8 +287,7 @@ function BillingDashboard() {
         monthMap[key].total += parseFloat(u.daily_usage_ccf);
       });
       const monthly = Object.values(monthMap)
-        .sort((a, b) => b.year - a.year || b.month - a.month)
-        .slice(0, 6);
+        .sort((a, b) => b.year - a.year || b.month - a.month);
       setPanelUsage(monthly);
 
       setPanelAlerts((alertsRes.data.alerts || []).slice(0, 5));
@@ -284,6 +309,8 @@ function BillingDashboard() {
     setPanelBills([]);
     setPanelUsage([]);
     setPanelAlerts([]);
+    setPanelRange(6);
+    setPanelMetric('ccf');
     refreshPanel(info);
   };
 
@@ -329,8 +356,10 @@ function BillingDashboard() {
 
       {/* Bills Table */}
       <div className="card">
-        <div className="flex flex-col sm:flex-row gap-3 mb-5">
-          <div className="flex gap-2 flex-1">
+        {/* ── Filter bar ── */}
+        <div className="flex flex-col gap-3 mb-5">
+          {/* Row 1: search + status */}
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={billsSearch}
@@ -338,19 +367,63 @@ function BillingDashboard() {
               placeholder="Search by customer name, email, or location ID…"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
             />
+            <select
+              value={billsStatus}
+              onChange={e => handleStatusFilter(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="sent">Sent</option>
+              <option value="overdue">Overdue</option>
+              <option value="paid">Paid</option>
+              <option value="refunded">Refunded</option>
+            </select>
+            <select
+              value={billsCustomerType}
+              onChange={e => { setBillsCustomerType(e.target.value); setBillsPage(1); fetchBills(1, billsSearch, billsStatus, billsDateFrom, billsDateTo, e.target.value); }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">All Types</option>
+              <option value="Residential">Residential</option>
+              <option value="Municipal">Municipal</option>
+              <option value="Commercial">Commercial</option>
+            </select>
           </div>
-          <select
-            value={billsStatus}
-            onChange={e => handleStatusFilter(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="sent">Sent</option>
-            <option value="overdue">Overdue</option>
-            <option value="paid">Paid</option>
-            <option value="refunded">Refunded</option>
-          </select>
+          {/* Row 2: date range */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">Period:</span>
+            <input
+              type="date"
+              value={billsDateFrom}
+              onChange={e => setBillsDateFrom(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              title="Billing period from"
+            />
+            <span className="text-xs text-gray-400">→</span>
+            <input
+              type="date"
+              value={billsDateTo}
+              onChange={e => setBillsDateTo(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              title="Billing period to"
+            />
+            <button
+              onClick={handleApplyFilters}
+              className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white transition"
+              style={{ background: '#0A4C78' }}
+            >
+              Apply
+            </button>
+            {(billsDateFrom || billsDateTo || billsCustomerType) && (
+              <button
+                onClick={handleClearFilters}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
 
         {billsLoading ? (
@@ -523,31 +596,73 @@ function BillingDashboard() {
 
                 {/* Usage summary */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recent Monthly Usage</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Usage History</p>
+                    <div className="flex items-center gap-2">
+                      {/* Metric toggle */}
+                      <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                        {[['ccf', 'CCF'], ['amount', 'Amount']].map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setPanelMetric(val)}
+                            className="px-2 py-1"
+                            style={panelMetric === val
+                              ? { background: '#0A4C78', color: '#fff' }
+                              : { background: '#fff', color: '#374151' }}
+                          >{label}</button>
+                        ))}
+                      </div>
+                      {/* Range buttons */}
+                      <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                        {[[3,'3m'],[6,'6m'],[12,'12m'],[0,'All']].map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setPanelRange(val)}
+                            className="px-2 py-1"
+                            style={panelRange === val
+                              ? { background: '#0A4C78', color: '#fff' }
+                              : { background: '#fff', color: '#374151' }}
+                          >{label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   {panelUsage.length === 0 ? (
                     <p className="text-sm text-gray-400">No usage data found.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {panelUsage.map(u => {
-                        const maxUsage = Math.max(...panelUsage.map(x => x.total));
-                        const pct = maxUsage > 0 ? (u.total / maxUsage) * 100 : 0;
-                        return (
-                          <div key={`${u.year}-${u.month}`}>
-                            <div className="flex justify-between text-xs text-gray-600 mb-1">
-                              <span>{MONTH_NAMES[u.month]} {u.year}</span>
-                              <span className="font-semibold">{u.total.toFixed(1)} CCF</span>
-                            </div>
-                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${pct}%`, background: '#0A4C78' }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  ) : (() => {
+                    const sorted = [...panelUsage].sort((a, b) =>
+                      a.year !== b.year ? a.year - b.year : a.month - b.month
+                    );
+                    const sliced = panelRange === 0 ? sorted : sorted.slice(-panelRange);
+                    const chartData = sliced.map(u => {
+                      const matchBill = panelBills.find(b => {
+                        const d = new Date(b.billing_period_end);
+                        return d.getFullYear() === u.year && (d.getMonth() + 1) === u.month;
+                      });
+                      return {
+                        label: `${MONTH_NAMES[u.month]} ${u.year}`,
+                        ccf: parseFloat(u.total.toFixed(2)),
+                        amount: matchBill ? parseFloat(parseFloat(matchBill.amount).toFixed(2)) : 0,
+                      };
+                    });
+                    const dataKey = panelMetric === 'ccf' ? 'ccf' : 'amount';
+                    const tickFmt = panelMetric === 'amount'
+                      ? (v) => `$${v}`
+                      : (v) => `${v}`;
+                    return (
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} tickFormatter={tickFmt} width={panelMetric === 'amount' ? 48 : 32} />
+                          <Tooltip
+                            formatter={(value) => panelMetric === 'amount' ? [`$${value}`, 'Amount'] : [`${value} CCF`, 'Usage']}
+                          />
+                          <Bar dataKey={dataKey} fill="#0A4C78" radius={[3, 3, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
                 </div>
 
                 {/* Alerts */}
