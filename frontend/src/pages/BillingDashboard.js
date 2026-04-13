@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  adminSearchBills, updateBill, sendNotification,
+  adminSearchBills, updateBill, refundBill, sendNotification,
   getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
 } from '../services/api';
 
 const PER_PAGE = 25;
 
 const STATUS_COLOR = {
-  paid:    'bg-green-100 text-green-700',
-  sent:    'bg-blue-100 text-blue-700',
-  pending: 'bg-yellow-100 text-yellow-800',
-  overdue: 'bg-red-100 text-red-700',
+  paid:     'bg-green-100 text-green-700',
+  sent:     'bg-blue-100 text-blue-700',
+  pending:  'bg-yellow-100 text-yellow-800',
+  overdue:  'bg-red-100 text-red-700',
+  refunded: 'bg-purple-100 text-purple-700',
 };
 
 const WATER_STATUS_COLOR = {
@@ -45,6 +46,11 @@ function BillingDashboard() {
   const [remindMessage, setRemindMessage] = useState('');
   const [remindSending, setRemindSending] = useState(false);
   const [remindSent, setRemindSent] = useState(false);
+
+  // Refund modal
+  const [refundingBill, setRefundingBill] = useState(null);
+  const [refundProcessing, setRefundProcessing] = useState(false);
+  const [refundError, setRefundError] = useState(null);
 
   // Generate bill modal
   const [generateModal, setGenerateModal] = useState(false);
@@ -143,6 +149,26 @@ function BillingDashboard() {
       setBills(prev => prev.map(b => b.id === bill.id ? updated : b));
       fetchStats();
     } catch (e) {}
+  };
+
+  // Refund
+  const handleRefund = async () => {
+    setRefundProcessing(true);
+    setRefundError(null);
+    try {
+      const res = await refundBill(refundingBill.id);
+      const updated = { ...refundingBill, ...res.data.bill };
+      setBills(prev => prev.map(b => b.id === refundingBill.id ? updated : b));
+      setRefundingBill(null);
+      fetchStats();
+      if (customerPanel && customerPanel.customer_id === refundingBill.customer_id) {
+        refreshPanel(customerPanel);
+      }
+    } catch (err) {
+      setRefundError(err.response?.data?.error || 'Failed to process refund');
+    } finally {
+      setRefundProcessing(false);
+    }
   };
 
   // Reminder
@@ -323,6 +349,7 @@ function BillingDashboard() {
             <option value="sent">Sent</option>
             <option value="overdue">Overdue</option>
             <option value="paid">Paid</option>
+            <option value="refunded">Refunded</option>
           </select>
         </div>
 
@@ -386,7 +413,7 @@ function BillingDashboard() {
                               Mark Sent
                             </button>
                           )}
-                          {bill.status !== 'paid' && (
+                          {bill.status !== 'paid' && bill.status !== 'refunded' && (
                             <button
                               onClick={() => openRemind(bill)}
                               className="text-xs px-2.5 py-1 rounded border border-yellow-200 text-yellow-700 hover:bg-yellow-50 transition"
@@ -394,12 +421,29 @@ function BillingDashboard() {
                               Remind
                             </button>
                           )}
-                          <button
-                            onClick={() => openEdit(bill)}
-                            className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
-                          >
-                            Edit
-                          </button>
+                          {bill.status === 'paid' && (
+                            <button
+                              onClick={() => { setRefundingBill(bill); setRefundError(null); }}
+                              className="text-xs px-2.5 py-1 rounded border border-purple-200 text-purple-700 hover:bg-purple-50 transition whitespace-nowrap"
+                            >
+                              Refund
+                            </button>
+                          )}
+                          {bill.status === 'paid' || bill.status === 'refunded' ? (
+                            <span
+                              className="text-xs px-2.5 py-1 rounded border border-gray-100 text-gray-300 cursor-not-allowed"
+                              title="Paid bills cannot be edited"
+                            >
+                              Edit
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openEdit(bill)}
+                              className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -666,6 +710,66 @@ function BillingDashboard() {
                 style={{ background: remindSent ? '#22c55e' : '#0A4C78' }}
               >
                 {remindSent ? 'Sent!' : remindSending ? 'Sending…' : 'Send Reminder'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Refund Confirmation Modal */}
+      {refundingBill && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => { if (!refundProcessing) { setRefundingBill(null); setRefundError(null); } }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Issue Refund</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <div className="bg-purple-50 rounded-xl p-4 mb-5">
+              <p className="text-sm font-semibold text-gray-700">{refundingBill.customer_name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {refundingBill.billing_period_start} → {refundingBill.billing_period_end}
+              </p>
+              <p className="text-xl font-bold text-purple-700 mt-2">
+                ${parseFloat(refundingBill.total_amount).toFixed(2)}
+              </p>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-5">
+              This will mark the bill as <strong>Refunded</strong> and notify the customer. The bill will no longer be editable.
+            </p>
+
+            {refundError && <p className="text-sm text-red-600 mb-4">{refundError}</p>}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setRefundingBill(null); setRefundError(null); }}
+                disabled={refundProcessing}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRefund}
+                disabled={refundProcessing}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
+                style={{ background: '#7c3aed' }}
+                onMouseEnter={e => { if (!refundProcessing) e.currentTarget.style.opacity = '0.85'; }}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                {refundProcessing ? 'Processing…' : 'Confirm Refund'}
               </button>
             </div>
           </div>

@@ -48,6 +48,7 @@ export const adminSearchBills = (params) => api.get('/billing/admin/bills', { pa
 export const getBillingStats = () => api.get('/billing/stats');
 export const generateBill = (data) => api.post('/billing/generate', data);
 export const updateBill = (id, data) => api.put(`/billing/bills/${id}`, data);
+export const refundBill = (id) => api.post(`/billing/bills/${id}/refund`);
 
 // Alerts
 export const getAlerts = (params) => api.get('/alerts', { params });

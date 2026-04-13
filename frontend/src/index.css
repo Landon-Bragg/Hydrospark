@@ -50,7 +50,6 @@ code {
     0 2px 4px  rgba(10, 76, 120, 0.05),
     0 12px 32px rgba(10, 76, 120, 0.11),
     0 0 0 1px rgba(30, 167, 214, 0.06);
-  transform: translateY(-1px);
 }
 
 /* ── Primary Button ───────────────────────────── */

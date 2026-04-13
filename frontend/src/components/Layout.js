@@ -30,6 +30,7 @@ const CUSTOMER_LINKS = [
 
 const BILLING_LINKS = [
   { to: '/billing', label: 'Billing' },
+  { to: '/alerts',  label: 'Alerts' },
   { to: '/inbox',   label: 'Inbox' },
   { to: '/usage',   label: 'Usage' },
 ];
@@ -38,7 +39,6 @@ const ADMIN_LINKS = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/usage',     label: 'Usage' },
   { to: '/forecasts', label: 'Forecasts' },
-  { to: '/alerts',    label: 'Alerts' },
   { to: '/inbox',     label: 'Inbox' },
   { to: '/admin',     label: 'Admin', accent: true },
 ];

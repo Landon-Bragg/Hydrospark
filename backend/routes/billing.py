@@ -255,6 +255,56 @@ def pay_bill(bill_id):
         return jsonify({'error': str(e)}), 500
 
 
+@billing_bp.route('/bills/<int:bill_id>/refund', methods=['POST'])
+@jwt_required()
+def refund_bill(bill_id):
+    """Billing/admin: refund a paid bill."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        bill = Bill.query.get(bill_id)
+        if not bill:
+            return jsonify({'error': 'Bill not found'}), 404
+
+        if bill.status != 'paid':
+            return jsonify({'error': 'Only paid bills can be refunded'}), 400
+
+        bill.status = 'refunded'
+        bill.refunded_at = datetime.utcnow()
+        bill.updated_at = datetime.utcnow()
+
+        # Notify the customer
+        try:
+            customer = Customer.query.get(bill.customer_id)
+            if customer:
+                from database import Notification
+                cust_user = User.query.get(customer.user_id)
+                if cust_user:
+                    notif = Notification(
+                        user_id=cust_user.id,
+                        created_by=user_id,
+                        title='Refund Processed',
+                        message=(
+                            f'A refund of ${float(bill.total_amount):.2f} has been issued '
+                            f'for your bill covering {bill.billing_period_start} to '
+                            f'{bill.billing_period_end}.'
+                        ),
+                    )
+                    db.session.add(notif)
+        except Exception:
+            pass
+
+        db.session.commit()
+        return jsonify({'message': 'Bill refunded', 'bill': bill.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @billing_bp.route('/bills/<int:bill_id>', methods=['PUT'])
 @jwt_required()
 def update_bill(bill_id):
@@ -268,6 +318,9 @@ def update_bill(bill_id):
         bill = Bill.query.get(bill_id)
         if not bill:
             return jsonify({'error': 'Bill not found'}), 404
+
+        if bill.status in ('paid', 'refunded'):
+            return jsonify({'error': 'Paid and refunded bills cannot be edited'}), 400
 
         data = request.get_json()
 
