@@ -150,10 +150,11 @@ class Bill(db.Model):
     total_usage_ccf = db.Column(db.Numeric(10, 2), nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     due_date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.Enum('pending', 'sent', 'paid', 'overdue'), default='pending')
+    status = db.Column(db.Enum('pending', 'sent', 'paid', 'overdue', 'refunded'), default='pending')
     is_estimated = db.Column(db.Boolean, default=False)
     sent_at = db.Column(db.DateTime)
     paid_at = db.Column(db.DateTime)
+    refunded_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -169,7 +170,8 @@ class Bill(db.Model):
             'status': self.status,
             'is_estimated': self.is_estimated,
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
-            'paid_at': self.paid_at.isoformat() if self.paid_at else None
+            'paid_at': self.paid_at.isoformat() if self.paid_at else None,
+            'refunded_at': self.refunded_at.isoformat() if self.refunded_at else None,
         }
 
 # Anomaly Alert Model
