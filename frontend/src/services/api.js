@@ -89,5 +89,6 @@ export const getNotifications = () => api.get('/support/notifications');
 export const markNotificationRead = (id) => api.patch(`/support/notifications/${id}/read`);
 export const deleteNotification = (id) => api.delete(`/support/notifications/${id}`);
 export const getUnreadCount = () => api.get('/support/notifications/unread-count');
+export const getSentNotifications = () => api.get('/support/sent-notifications');
 
 export default api;
