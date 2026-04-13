@@ -90,12 +90,16 @@ def run_migrations():
 
     # (table_name, column_name, column_definition)
     migrations = [
-        ("customers", "autopay_enabled",       "BOOLEAN DEFAULT FALSE"),
-        ("customers", "payment_method_type",   "VARCHAR(20) NULL"),
-        ("customers", "payment_method_last4",  "VARCHAR(4) NULL"),
-        ("customers", "payment_method_name",   "VARCHAR(100) NULL"),
-        ("customers", "payment_method_expiry", "VARCHAR(5) NULL"),
-        ("users",     "invite_token",          "VARCHAR(100) NULL"),
+        ("customers",      "autopay_enabled",         "BOOLEAN DEFAULT FALSE"),
+        ("customers",      "payment_method_type",     "VARCHAR(20) NULL"),
+        ("customers",      "payment_method_last4",    "VARCHAR(4) NULL"),
+        ("customers",      "payment_method_name",     "VARCHAR(100) NULL"),
+        ("customers",      "payment_method_expiry",   "VARCHAR(5) NULL"),
+        ("users",          "invite_token",            "VARCHAR(100) NULL"),
+        ("anomaly_alerts", "action_taken",            "VARCHAR(50) NULL"),
+        ("anomaly_alerts", "dispatched_at",           "DATETIME NULL"),
+        ("anomaly_alerts", "notes",                   "TEXT NULL"),
+        ("anomaly_alerts", "bill_adjustment_amount",  "DECIMAL(10,2) NULL"),
     ]
     try:
         with db.engine.connect() as conn:
