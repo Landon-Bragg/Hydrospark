@@ -308,17 +308,41 @@ function Dashboard() {
           </p>
         </div>
 
-        {/* Alerts card */}
-        <div className="card" style={{ borderLeft: `4px solid ${alerts.length > 0 ? '#ef4444' : '#e5e7eb'}` }}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Active Alerts</p>
-          <p className={`text-3xl font-bold ${alerts.length > 0 ? 'text-red-600' : 'text-gray-400'}`}>{alerts.length}</p>
-          {alerts.length > 0 ? (
-            <p className="text-sm text-red-500 mt-1">Unusual usage detected — see below</p>
-          ) : (
-            <p className="text-sm text-gray-400 mt-1">No unusual activity detected</p>
-          )}
-          <a href="/usage" className="text-xs text-hydro-spark-blue underline mt-1 block">View usage history →</a>
-        </div>
+        {/* Billing status card */}
+        {(() => {
+          const overdue = unpaidBills.filter(b => b.status === 'overdue');
+          const pending = unpaidBills.filter(b => b.status === 'pending');
+          const totalOwed = unpaidBills.reduce((sum, b) => sum + parseFloat(b.total_amount), 0);
+          const nextDue = [...unpaidBills].sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0];
+          const hasOverdue = overdue.length > 0;
+          const hasPending = pending.length > 0;
+          const accent = hasOverdue ? '#ef4444' : hasPending ? '#f59e0b' : '#22c55e';
+          return (
+            <div className="card" style={{ borderLeft: `4px solid ${accent}` }}>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Billing Status</p>
+              {unpaidBills.length === 0 ? (
+                <>
+                  <p className="text-3xl font-bold text-green-600">All Paid</p>
+                  <p className="text-sm text-gray-400 mt-1">No outstanding balance</p>
+                </>
+              ) : (
+                <>
+                  <p className={`text-3xl font-bold ${hasOverdue ? 'text-red-600' : 'text-yellow-600'}`}>
+                    ${totalOwed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {unpaidBills.length} unpaid bill{unpaidBills.length > 1 ? 's' : ''}
+                    {hasOverdue && <span className="text-red-500 ml-1">· {overdue.length} overdue</span>}
+                  </p>
+                  {nextDue && (
+                    <p className="text-xs text-gray-400 mt-0.5">Next due: {nextDue.due_date}</p>
+                  )}
+                </>
+              )}
+              <a href="/pay" className="text-xs text-hydro-spark-blue underline mt-1 block">View bills →</a>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Monthly usage trend bar chart ── */}

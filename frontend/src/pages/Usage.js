@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill } from '../services/api';
+import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill, getAlerts } from '../services/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell
@@ -301,6 +301,8 @@ function Usage() {
   const [allCustomers, setAllCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [anomalyAlerts, setAnomalyAlerts] = useState([]);
+  const [anomalyExpanded, setAnomalyExpanded] = useState(false);
 
   // Edit bill modal state (lifted here so modal renders outside .card stacking context)
   const [editingBill, setEditingBill] = useState(null);
@@ -350,12 +352,14 @@ function Usage() {
     setError(null);
     try {
       const params = getDateParams(dateRange);
-      const [topRes, customersRes] = await Promise.all([
+      const [topRes, customersRes, alertsRes] = await Promise.all([
         getTopCustomers(params),
         getAdminCharges(),
+        getAlerts({ limit: 20 }).catch(() => ({ data: { alerts: [] } })),
       ]);
       setTopCustomers(topRes.data.top_customers || []);
       setAllCustomers(customersRes.data.customers || []);
+      setAnomalyAlerts(alertsRes.data.alerts || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load usage data');
     } finally {
@@ -460,6 +464,76 @@ function Usage() {
 
       {isAdmin ? (
         <>
+          {/* ── Unusual Activity Panel ── */}
+          {anomalyAlerts.length > 0 ? (
+            <div className="mb-6 rounded-xl border-2 border-red-300 bg-red-50 overflow-hidden">
+              <button
+                onClick={() => setAnomalyExpanded(e => !e)}
+                className="w-full flex items-center justify-between px-5 py-4 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <p className="text-base font-bold text-red-700">
+                      {anomalyAlerts.length} Unusual Activity Event{anomalyAlerts.length > 1 ? 's' : ''} Detected
+                    </p>
+                    <p className="text-sm text-red-600">
+                      Customers with usage significantly above expected levels — review may be needed
+                    </p>
+                  </div>
+                </div>
+                <span className="text-red-400 text-lg font-bold ml-4">{anomalyExpanded ? '▲' : '▼'}</span>
+              </button>
+              {anomalyExpanded && (
+                <div className="border-t border-red-200 px-5 pb-4">
+                  <div className="space-y-2 mt-3">
+                    {anomalyAlerts.slice(0, 10).map(a => (
+                      <div
+                        key={a.id}
+                        className="flex items-center justify-between bg-white rounded-lg px-4 py-2.5 border border-red-100 cursor-pointer hover:bg-red-50 transition"
+                        onClick={() => {
+                          const match = allCustomers.find(c => c.customer_name === a.customer_name);
+                          if (match) { setSelectedCustomer(match); setAnomalyExpanded(false); }
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            a.alert_type === 'high_usage' ? 'bg-red-100 text-red-700'
+                            : a.alert_type === 'anomaly' ? 'bg-orange-100 text-orange-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                          } capitalize`}>{a.alert_type?.replace(/_/g, ' ')}</span>
+                          <span className="text-sm font-semibold text-gray-800">{a.customer_name || 'Unknown'}</span>
+                          <span className="text-xs text-gray-400">{a.alert_date}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-right">
+                          <span className="text-sm font-semibold text-red-600">
+                            {parseFloat(a.usage_ccf || 0).toFixed(1)} CCF
+                          </span>
+                          {a.deviation_percentage != null && (
+                            <span className="text-xs font-bold text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                              +{Math.round(a.deviation_percentage)}%
+                            </span>
+                          )}
+                          <span className="text-xs text-hydro-spark-blue">View →</span>
+                        </div>
+                      </div>
+                    ))}
+                    {anomalyAlerts.length > 10 && (
+                      <p className="text-xs text-gray-400 text-center pt-1">
+                        Showing 10 of {anomalyAlerts.length} — see <a href="/alerts" className="underline text-hydro-spark-blue">Alerts page</a> for full list
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mb-6 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+              <span className="text-green-600 text-lg">✓</span>
+              <p className="text-sm font-medium text-green-700">No unusual activity detected in this period</p>
+            </div>
+          )}
+
           {/* Top customers horizontal bar chart */}
           <div className="card mb-6">
             <h2 className="text-xl font-semibold mb-4">Top 15 Customers by Usage</h2>
@@ -566,6 +640,69 @@ function Usage() {
               )}
             </div>
           </div>
+
+          {/* ── Unusual Activity Callout ── */}
+          {(() => {
+            if (!myUsage.length) return null;
+            const dayMap = {};
+            for (const u of myUsage) {
+              dayMap[u.usage_date] = (dayMap[u.usage_date] || 0) + parseFloat(u.daily_usage_ccf || 0);
+            }
+            const spikes = Object.entries(dayMap)
+              .map(([date, val]) => ({ date, val }))
+              .filter(({ val }) => myAvgDaily > 0 && val > myAvgDaily * 1.3)
+              .sort((a, b) => b.val - a.val);
+            if (spikes.length === 0) {
+              return (
+                <div className="mb-6 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+                  <span className="text-green-600 text-lg">✓</span>
+                  <p className="text-sm font-medium text-green-700">No unusual activity in this period — your usage looks normal.</p>
+                </div>
+              );
+            }
+            const worst = spikes[0];
+            const worstPct = Math.round(((worst.val - myAvgDaily) / myAvgDaily) * 100);
+            const isSevere = spikes.some(s => s.val > myAvgDaily * 1.75);
+            return (
+              <div className={`mb-6 rounded-xl border-2 p-5 ${isSevere ? 'border-red-400 bg-red-50' : 'border-amber-400 bg-amber-50'}`}>
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{isSevere ? '🚨' : '⚠️'}</span>
+                  <div className="flex-1">
+                    <p className={`text-base font-bold ${isSevere ? 'text-red-700' : 'text-amber-800'}`}>
+                      {spikes.length} Day{spikes.length > 1 ? 's' : ''} of Unusual Activity Detected
+                    </p>
+                    <p className={`text-sm mt-1 ${isSevere ? 'text-red-600' : 'text-amber-700'}`}>
+                      Highest spike: <strong>{worst.date}</strong> at {worst.val.toFixed(1)} CCF
+                      — <strong>+{worstPct}% above your average</strong>.
+                      {isSevere && ' This may indicate a leak or other issue.'}
+                    </p>
+                    {spikes.length > 1 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {spikes.slice(0, 5).map(({ date, val }) => {
+                          const pct = Math.round(((val - myAvgDaily) / myAvgDaily) * 100);
+                          return (
+                            <span
+                              key={date}
+                              className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                                pct >= 75
+                                  ? 'bg-red-100 text-red-700 border-red-200'
+                                  : 'bg-amber-100 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              {date} · +{pct}%
+                            </span>
+                          );
+                        })}
+                        {spikes.length > 5 && (
+                          <span className="text-xs text-gray-500 self-center">+{spikes.length - 5} more (see chart below)</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Daily usage chart */}
           <div className="card mb-6">
