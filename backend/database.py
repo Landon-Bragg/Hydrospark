@@ -190,7 +190,12 @@ class AnomalyAlert(db.Model):
     notification_sent = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     resolved_at = db.Column(db.DateTime)
-    
+    # Workflow action fields
+    action_taken = db.Column(db.String(50), nullable=True)          # 'dispatch' | 'bill_adjustment'
+    dispatched_at = db.Column(db.DateTime, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    bill_adjustment_amount = db.Column(db.Numeric(10, 2), nullable=True)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -203,7 +208,11 @@ class AnomalyAlert(db.Model):
             'alert_type': self.alert_type,
             'status': self.status,
             'notification_sent': self.notification_sent,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'action_taken': self.action_taken,
+            'dispatched_at': self.dispatched_at.isoformat() if self.dispatched_at else None,
+            'notes': self.notes,
+            'bill_adjustment_amount': float(self.bill_adjustment_amount) if self.bill_adjustment_amount else None,
         }
 
 # Usage Forecast Model

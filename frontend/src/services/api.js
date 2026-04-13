@@ -54,6 +54,8 @@ export const refundBill = (id) => api.post(`/billing/bills/${id}/refund`);
 // Alerts
 export const getAlerts = (params) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id) => api.post(`/alerts/${id}/acknowledge`);
+export const dispatchAlert = (id, data) => api.post(`/alerts/${id}/dispatch`, data);
+export const applyBillAdjustment = (id, data) => api.post(`/alerts/${id}/adjust-bill`, data);
 
 // Admin
 export const getUsers = () => api.get('/admin/users');
