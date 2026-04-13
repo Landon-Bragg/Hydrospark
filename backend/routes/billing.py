@@ -145,6 +145,10 @@ def admin_search_bills():
             .join(User, Customer.user_id == User.id)
         )
 
+        date_from    = request.args.get('date_from', '').strip()
+        date_to      = request.args.get('date_to', '').strip()
+        customer_type = request.args.get('customer_type', '').strip()
+
         if customer_id:
             query = query.filter(Bill.customer_id == customer_id)
         elif search:
@@ -158,6 +162,12 @@ def admin_search_bills():
 
         if status:
             query = query.filter(Bill.status == status)
+        if customer_type:
+            query = query.filter(Customer.customer_type == customer_type)
+        if date_from:
+            query = query.filter(Bill.billing_period_end >= date_from)
+        if date_to:
+            query = query.filter(Bill.billing_period_end <= date_to)
 
         total = query.count()
         results = query.order_by(Bill.billing_period_end.desc()).offset((page - 1) * per_page).limit(per_page).all()
