@@ -57,6 +57,7 @@ export const acknowledgeAlert = (id) => api.post(`/alerts/${id}/acknowledge`);
 // Admin
 export const getUsers = () => api.get('/admin/users');
 export const getAdminCharges = () => api.get('/admin/charges');
+export const updateCustomer = (customerId, data) => api.put(`/admin/customers/${customerId}`, data);
 export const setCustomerRate = (customerId, data) => api.put(`/admin/customers/${customerId}/rate`, data);
 export const getZipRates = () => api.get('/admin/zip-rates');
 export const createZipRate = (data) => api.post('/admin/zip-rates', data);

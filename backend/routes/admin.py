@@ -326,6 +326,86 @@ def restore_water(customer_id):
         return jsonify({'error': str(e)}), 500
 
 
+@admin_bp.route('/customers/<int:customer_id>', methods=['PUT'])
+@jwt_required()
+def update_customer(customer_id):
+    """Admin: update customer profile and associated user fields."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+
+        data = request.get_json() or {}
+
+        # ── Customer fields ──────────────────────────────────────────
+        if 'customer_name' in data:
+            customer.customer_name = data['customer_name'].strip()
+        if 'customer_type' in data and data['customer_type'] in ('Residential', 'Municipal', 'Commercial'):
+            customer.customer_type = data['customer_type']
+        if 'mailing_address' in data:
+            customer.mailing_address = data['mailing_address'].strip()
+        if 'zip_code' in data:
+            customer.zip_code = data['zip_code'].strip() or None
+        if 'location_id' in data:
+            new_loc = data['location_id'].strip()
+            # Ensure location_id uniqueness
+            existing = Customer.query.filter(Customer.location_id == new_loc, Customer.id != customer_id).first()
+            if existing:
+                return jsonify({'error': f'Location ID "{new_loc}" is already assigned to another customer'}), 400
+            customer.location_id = new_loc
+        if 'cycle_number' in data:
+            customer.cycle_number = int(data['cycle_number']) if data['cycle_number'] not in (None, '') else None
+        if 'business_name' in data:
+            customer.business_name = data['business_name'].strip() or None
+        if 'facility_name' in data:
+            customer.facility_name = data['facility_name'].strip() or None
+
+        # ── User fields ──────────────────────────────────────────────
+        cust_user = User.query.get(customer.user_id) if customer.user_id else None
+        if cust_user:
+            if 'first_name' in data:
+                cust_user.first_name = data['first_name'].strip() or None
+            if 'last_name' in data:
+                cust_user.last_name = data['last_name'].strip() or None
+            if 'phone' in data:
+                cust_user.phone = data['phone'].strip() or None
+            if 'email' in data:
+                new_email = data['email'].strip().lower()
+                if new_email and new_email != cust_user.email:
+                    if User.query.filter(User.email == new_email, User.id != cust_user.id).first():
+                        return jsonify({'error': f'Email "{new_email}" is already in use'}), 400
+                    cust_user.email = new_email
+
+        customer.updated_at = datetime.utcnow()
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action='update_customer',
+            entity_type='customer',
+            entity_id=customer_id,
+            details=f'Updated customer profile for {customer.customer_name}',
+            ip_address=request.remote_addr,
+        ))
+        db.session.commit()
+
+        result = customer.to_dict()
+        if cust_user:
+            result['email'] = cust_user.email
+            result['first_name'] = cust_user.first_name
+            result['last_name'] = cust_user.last_name
+            result['phone'] = cust_user.phone
+
+        return jsonify({'message': 'Customer updated', 'customer': result}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @admin_bp.route('/customers/<int:customer_id>/rate', methods=['PUT'])
 @jwt_required()
 def set_customer_rate(customer_id):

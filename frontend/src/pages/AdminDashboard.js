@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { importData, getAdminCharges, setCustomerRate, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater, detectAnomalies, generateHistoricalBills } from '../services/api';
+import { createPortal } from 'react-dom';
+import { importData, getAdminCharges, setCustomerRate, updateCustomer, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater, detectAnomalies, generateHistoricalBills } from '../services/api';
 
 const TABS = [
   { key: 'tools',     label: 'Tools' },
@@ -39,6 +40,12 @@ function AdminDashboard() {
   const [editingRateFor, setEditingRateFor] = useState(null);
   const [rateEditValues, setRateEditValues] = useState({ custom_rate_per_ccf: '', zip_code: '' });
   const [rateSaving, setRateSaving] = useState(false);
+
+  // ── Edit customer modal ──────────────────────────────────────────────────────
+  const [editingCustomer, setEditingCustomer] = useState(null); // full customer row
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
 
   // ── Delinquent ───────────────────────────────────────────────────────────────
   const [delinquent, setDelinquent] = useState([]);
@@ -122,6 +129,41 @@ function AdminDashboard() {
       alert(err.response?.data?.error || 'Action failed');
     } finally {
       setShutoffWorking(null);
+    }
+  };
+
+  const openEditCustomer = (customer) => {
+    setEditingCustomer(customer);
+    setEditForm({
+      customer_name:  customer.customer_name  || '',
+      customer_type:  customer.customer_type  || 'Residential',
+      location_id:    customer.location_id    || '',
+      mailing_address: customer.mailing_address || '',
+      zip_code:       customer.zip_code        || '',
+      business_name:  customer.business_name  || '',
+      facility_name:  customer.facility_name  || '',
+      cycle_number:   customer.cycle_number != null ? String(customer.cycle_number) : '',
+      email:          customer.email           || '',
+      first_name:     customer.first_name      || '',
+      last_name:      customer.last_name       || '',
+      phone:          customer.phone           || '',
+    });
+    setEditError(null);
+  };
+
+  const handleEditSave = async () => {
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await updateCustomer(editingCustomer.customer_id, editForm);
+      const updated = { ...editingCustomer, ...res.data.customer, email: res.data.customer.email || editingCustomer.email };
+      setCharges(prev => prev.map(c => c.customer_id === editingCustomer.customer_id ? updated : c));
+      setDelinquent(prev => prev.map(c => c.customer_id === editingCustomer.customer_id ? { ...c, customer_name: updated.customer_name, customer_type: updated.customer_type, location_id: updated.location_id } : c));
+      setEditingCustomer(null);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to save changes');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -564,6 +606,7 @@ function AdminDashboard() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right whitespace-nowrap">
+                              <button onClick={() => openEditCustomer(customer)} className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-100 mr-1">Edit</button>
                               <button onClick={() => openRateEditor(customer)} className="text-xs px-2 py-1 rounded border border-hydro-deep-aqua text-hydro-deep-aqua hover:bg-hydro-sky-blue mr-1">Set Rate</button>
                               <button onClick={() => setExpandedCustomer(expandedCustomer === customer.customer_id ? null : customer.customer_id)} className="text-gray-400 text-xs">
                                 {expandedCustomer === customer.customer_id ? '▲' : '▼'}
@@ -877,6 +920,129 @@ function AdminDashboard() {
             })()}
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT CUSTOMER MODAL (portal)
+      ═══════════════════════════════════════════════════════════════ */}
+      {editingCustomer && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => { if (!editSaving) setEditingCustomer(null); }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden"
+            style={{ maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="px-6 py-4 border-b border-gray-100" style={{ background: '#0A4C78' }}>
+              <p className="text-white font-bold text-lg">Edit Customer</p>
+              <p className="text-blue-200 text-sm mt-0.5">{editingCustomer.customer_name} &bull; {editingCustomer.location_id}</p>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+
+              {/* Account Info */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Account Info</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                    <input type="text" value={editForm.customer_name} onChange={e => setEditForm(f => ({ ...f, customer_name: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Customer Type</label>
+                    <select value={editForm.customer_type} onChange={e => setEditForm(f => ({ ...f, customer_type: e.target.value }))} className="input-field">
+                      <option value="Residential">Residential</option>
+                      <option value="Municipal">Municipal</option>
+                      <option value="Commercial">Commercial</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Location ID</label>
+                    <input type="text" value={editForm.location_id} onChange={e => setEditForm(f => ({ ...f, location_id: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Cycle Number</label>
+                    <input type="number" min="0" value={editForm.cycle_number} onChange={e => setEditForm(f => ({ ...f, cycle_number: e.target.value }))} className="input-field" placeholder="e.g. 1" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Business Name</label>
+                    <input type="text" value={editForm.business_name} onChange={e => setEditForm(f => ({ ...f, business_name: e.target.value }))} className="input-field" placeholder="Optional" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Facility Name</label>
+                    <input type="text" value={editForm.facility_name} onChange={e => setEditForm(f => ({ ...f, facility_name: e.target.value }))} className="input-field" placeholder="Optional" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Location</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Mailing Address</label>
+                    <input type="text" value={editForm.mailing_address} onChange={e => setEditForm(f => ({ ...f, mailing_address: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Zip Code</label>
+                    <input type="text" value={editForm.zip_code} onChange={e => setEditForm(f => ({ ...f, zip_code: e.target.value }))} className="input-field" maxLength={10} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact (User record) */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Contact / Login</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Email (login)</label>
+                    <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">First Name</label>
+                    <input type="text" value={editForm.first_name} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Last Name</label>
+                    <input type="text" value={editForm.last_name} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+                    <input type="text" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="input-field" placeholder="Optional" />
+                  </div>
+                </div>
+              </div>
+
+              {editError && <p className="text-sm text-red-600">{editError}</p>}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-5 flex gap-3">
+              <button
+                onClick={() => setEditingCustomer(null)}
+                disabled={editSaving}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editForm.customer_name.trim()}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
+                style={{ background: '#0A4C78' }}
+                onMouseEnter={e => { if (!editSaving) e.currentTarget.style.opacity = '0.85'; }}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
