@@ -245,3 +245,35 @@ def unread_count():
     user_id = int(get_jwt_identity())
     count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
     return jsonify({'count': count})
+
+
+@support_bp.route('/sent-notifications', methods=['GET'])
+@jwt_required()
+def get_sent_notifications():
+    """Staff: history of all notifications they have sent, grouped by send batch."""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user or user.role not in ['admin', 'billing']:
+        return jsonify({'error': 'Access denied'}), 403
+
+    notifs = Notification.query.filter_by(created_by=user_id)\
+        .order_by(Notification.created_at.desc()).all()
+
+    # Group rows that share the same title + message + minute (broadcast sends
+    # one row per recipient; we surface them as a single sent item with a count).
+    groups = {}
+    for n in notifs:
+        minute_key = n.created_at.replace(second=0, microsecond=0).isoformat() \
+            if n.created_at else ''
+        key = (n.title, n.message, minute_key)
+        if key not in groups:
+            groups[key] = {
+                'title': n.title,
+                'message': n.message,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+                'recipient_count': 0,
+            }
+        groups[key]['recipient_count'] += 1
+
+    result = sorted(groups.values(), key=lambda x: x['created_at'] or '', reverse=True)
+    return jsonify({'sent_notifications': result})

@@ -4,6 +4,7 @@ import {
   getSupportThreads, getThreadMessages, sendToCustomer,
   getMyMessages, sendMyMessage,
   sendNotification, getNotifications, markNotificationRead, deleteNotification,
+  getSentNotifications,
 } from '../services/api';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -39,10 +40,15 @@ function StaffInbox() {
   const [notifSending, setNotifSending] = useState(false);
   const [notifSuccess, setNotifSuccess] = useState('');
 
+  // Sent alerts history
+  const [sentNotifs, setSentNotifs] = useState([]);
+  const [sentLoading, setSentLoading] = useState(false);
+
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     loadThreads();
+    loadSentNotifs();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -58,6 +64,18 @@ function StaffInbox() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSentNotifs = async () => {
+    setSentLoading(true);
+    try {
+      const r = await getSentNotifications();
+      setSentNotifs(r.data.sent_notifications || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSentLoading(false);
     }
   };
 
@@ -104,6 +122,7 @@ function StaffInbox() {
       setNotifMessage('');
       setNotifTarget('all');
       setNotifUserId('');
+      loadSentNotifs();
     } catch (e) {
       console.error(e);
     } finally {
@@ -265,89 +284,119 @@ function StaffInbox() {
 
       {/* ── Send Alert tab ── */}
       {tab === 'alerts' && (
-        <div className="card max-w-xl">
-          <h2 className="text-lg font-bold text-hydro-deep-aqua mb-4">Send Alert to Customers</h2>
-          <p className="text-sm text-gray-500 mb-5">
-            Alerts appear as notifications on the customer's dashboard and inbox.
-          </p>
+        <div className="space-y-6 max-w-xl">
+          {/* Compose form */}
+          <div className="card">
+            <h2 className="text-lg font-bold text-hydro-deep-aqua mb-4">Send Alert to Customers</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Alerts appear as notifications on the customer's dashboard and inbox.
+            </p>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Recipients</label>
-              <div className="flex gap-3">
-                {['all', 'specific'].map(opt => (
-                  <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      value={opt}
-                      checked={notifTarget === opt}
-                      onChange={() => setNotifTarget(opt)}
-                    />
-                    <span className="text-sm text-gray-700">
-                      {opt === 'all' ? 'All customers' : 'Specific customer'}
-                    </span>
-                  </label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Recipients</label>
+                <div className="flex gap-3">
+                  {['all', 'specific'].map(opt => (
+                    <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        value={opt}
+                        checked={notifTarget === opt}
+                        onChange={() => setNotifTarget(opt)}
+                      />
+                      <span className="text-sm text-gray-700">
+                        {opt === 'all' ? 'All customers' : 'Specific customer'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {notifTarget === 'specific' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+                  <select
+                    value={notifUserId}
+                    onChange={e => setNotifUserId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="">— Select a customer —</option>
+                    {threads.filter(t => t.user_id).map(t => (
+                      <option key={t.user_id} value={t.user_id}>
+                        {t.customer_name} ({t.location_id})
+                      </option>
+                    ))}
+                  </select>
+                  {loading && <p className="text-xs text-gray-400 mt-1">Loading customers…</p>}
+                  {!loading && threads.filter(t => t.user_id).length === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">No customer accounts found.</p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={notifTitle}
+                  onChange={e => setNotifTitle(e.target.value)}
+                  placeholder="e.g. Scheduled Maintenance"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={notifMessage}
+                  onChange={e => setNotifMessage(e.target.value)}
+                  rows={4}
+                  placeholder="Write your alert message here…"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 resize-none"
+                />
+              </div>
+
+              {notifSuccess && (
+                <div className="p-3 rounded-lg text-sm text-green-700 bg-green-50 border border-green-200">
+                  {notifSuccess}
+                </div>
+              )}
+
+              <button
+                onClick={handleSendNotification}
+                disabled={notifSending || !notifTitle.trim() || !notifMessage.trim() || (notifTarget === 'specific' && !notifUserId)}
+                className="btn-primary w-full py-2.5 disabled:opacity-50"
+              >
+                {notifSending ? 'Sending…' : 'Send Alert'}
+              </button>
+            </div>
+          </div>
+
+          {/* Sent history */}
+          <div className="card">
+            <h2 className="text-lg font-bold text-hydro-deep-aqua mb-4">Sent Alert History</h2>
+            {sentLoading ? (
+              <div className="flex justify-center py-6"><div className="hydro-spinner" /></div>
+            ) : sentNotifs.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">No alerts sent yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {sentNotifs.map((n, i) => (
+                  <div key={i} className="p-3 rounded-xl border border-gray-100 bg-gray-50">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{n.title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                      </div>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium whitespace-nowrap flex-shrink-0">
+                        {n.recipient_count} {n.recipient_count === 1 ? 'recipient' : 'recipients'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">{formatTime(n.created_at)}</p>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {notifTarget === 'specific' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                <select
-                  value={notifUserId}
-                  onChange={e => setNotifUserId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-                >
-                  <option value="">— Select a customer —</option>
-                  {threads.filter(t => t.user_id).map(t => (
-                    <option key={t.user_id} value={t.user_id}>
-                      {t.customer_name} ({t.location_id})
-                    </option>
-                  ))}
-                </select>
-                {loading && <p className="text-xs text-gray-400 mt-1">Loading customers…</p>}
-                {!loading && threads.filter(t => t.user_id).length === 0 && (
-                  <p className="text-xs text-gray-400 mt-1">No customer accounts found.</p>
-                )}
-              </div>
             )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-              <input
-                type="text"
-                value={notifTitle}
-                onChange={e => setNotifTitle(e.target.value)}
-                placeholder="e.g. Scheduled Maintenance"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-              <textarea
-                value={notifMessage}
-                onChange={e => setNotifMessage(e.target.value)}
-                rows={4}
-                placeholder="Write your alert message here…"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 resize-none"
-              />
-            </div>
-
-            {notifSuccess && (
-              <div className="p-3 rounded-lg text-sm text-green-700 bg-green-50 border border-green-200">
-                {notifSuccess}
-              </div>
-            )}
-
-            <button
-              onClick={handleSendNotification}
-              disabled={notifSending || !notifTitle.trim() || !notifMessage.trim() || (notifTarget === 'specific' && !notifUserId)}
-              className="btn-primary w-full py-2.5 disabled:opacity-50"
-            >
-              {notifSending ? 'Sending…' : 'Send Alert'}
-            </button>
           </div>
         </div>
       )}
