@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { getAlerts, acknowledgeAlert, dispatchAlert, applyBillAdjustment } from '../services/api';
 
 // ── Suggested credit helper ───────────────────────────────────────────────────
-// Uses the default $5.72/CCF rate as a rough estimate; admin can override.
 const DEFAULT_RATE = 5.72;
 
 function suggestedCredit(alert) {
@@ -98,9 +97,7 @@ function DispatchModal({ alert, onClose, onSuccess }) {
       <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
         A service/investigation request will be logged and the customer will be notified.
       </p>
-
       <AlertSummary alert={alert} />
-
       <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
         Investigation notes <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
       </label>
@@ -110,31 +107,19 @@ function DispatchModal({ alert, onClose, onSuccess }) {
         placeholder="e.g. Check meter at facility, possible irrigation leak…"
         rows={3}
         style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '8px', padding: '10px 12px',
-                 fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none',
-                 fontFamily: 'inherit' }}
+                 fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
       />
-
-      {error && (
-        <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>
-      )}
-
+      {error && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-        <button
-          onClick={onClose}
-          disabled={loading}
+        <button onClick={onClose} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #d1d5db',
-                   background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 600,
-                   cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
+                   background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           Cancel
         </button>
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
+        <button onClick={handleSubmit} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: 'none',
                    background: loading ? '#93c5fd' : '#1d4ed8', color: '#fff',
-                   fontSize: '13px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
+                   fontSize: '13px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}>
           {loading ? 'Dispatching…' : 'Dispatch Investigation'}
         </button>
       </div>
@@ -171,28 +156,19 @@ function BillCreditModal({ alert, onClose, onSuccess }) {
     <Modal onClose={loading ? undefined : onClose}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
         <span style={{ fontSize: '22px' }}>💳</span>
-        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0A4C78', margin: 0 }}>
-          Apply Bill Credit
-        </h2>
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0A4C78', margin: 0 }}>Apply Bill Credit</h2>
       </div>
       <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
         A credit will be deducted from the bill covering this alert date and the customer will be notified.
       </p>
-
       <AlertSummary alert={alert} />
-
       <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
         Credit amount ($)
       </label>
       <div style={{ position: 'relative', marginBottom: '6px' }}>
         <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
                        fontSize: '14px', color: '#6b7280', pointerEvents: 'none' }}>$</span>
-        <input
-          type="number"
-          min="0.01"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+        <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
           style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '8px',
                    padding: '10px 12px 10px 24px', fontSize: '15px', fontWeight: 700,
                    boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
@@ -203,41 +179,26 @@ function BillCreditModal({ alert, onClose, onSuccess }) {
           Suggested: {excess.toFixed(2)} excess CCF × ${DEFAULT_RATE}/CCF = <strong>${suggested}</strong> — edit as needed
         </p>
       )}
-
       <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
         Reason / note <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
       </label>
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
+      <textarea value={note} onChange={(e) => setNote(e.target.value)}
         placeholder="e.g. Confirmed leak at meter, credit for excess usage…"
         rows={2}
         style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '8px', padding: '10px 12px',
-                 fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none',
-                 fontFamily: 'inherit' }}
+                 fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
       />
-
-      {error && (
-        <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>
-      )}
-
+      {error && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-        <button
-          onClick={onClose}
-          disabled={loading}
+        <button onClick={onClose} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #d1d5db',
-                   background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 600,
-                   cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
+                   background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           Cancel
         </button>
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
+        <button onClick={handleSubmit} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: 'none',
                    background: loading ? '#6ee7b7' : '#059669', color: '#fff',
-                   fontSize: '13px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
+                   fontSize: '13px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}>
           {loading ? 'Applying…' : `Apply $${parseFloat(amount || 0).toFixed(2)} Credit`}
         </button>
       </div>
@@ -268,27 +229,53 @@ function ActionBadge({ alert }) {
   return null;
 }
 
+// ── Pill toggle button ────────────────────────────────────────────────────────
+function Pill({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1 text-xs font-semibold rounded-full border transition-colors whitespace-nowrap"
+      style={active
+        ? { background: '#0A4C78', color: '#fff', borderColor: '#0A4C78' }
+        : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 function Alerts() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'billing';
 
+  // Server-side status filter (drives the API call)
+  const [statusFilter, setStatusFilter] = useState('all');
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
 
-  // Modal state
-  const [dispatchTarget, setDispatchTarget]   = useState(null);   // alert | null
-  const [creditTarget, setCreditTarget]       = useState(null);   // alert | null
+  // Client-side filters
+  const [typeFilter, setTypeFilter]       = useState('');    // '' | 'spike' | 'leak' | 'unusual_pattern'
+  const [riskFilter, setRiskFilter]       = useState('');    // '' | 'high' | 'medium' | 'low'
+  const [dateFrom, setDateFrom]           = useState('');
+  const [dateTo, setDateTo]               = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');  // admin only
+
+  // Sort
+  const [sortBy, setSortBy]     = useState('date_desc');     // date_desc | date_asc | risk_desc | risk_asc
+
+  // Action modals
+  const [dispatchTarget, setDispatchTarget] = useState(null);
+  const [creditTarget, setCreditTarget]     = useState(null);
 
   useEffect(() => {
     loadAlerts();
-  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const params = filter !== 'all' ? { status: filter } : {};
+      const params = statusFilter !== 'all' ? { status: statusFilter } : {};
       const response = await getAlerts(params);
       setAlerts(response.data.alerts || []);
     } catch (err) {
@@ -306,6 +293,50 @@ function Alerts() {
       console.error('Failed to acknowledge alert', err);
     }
   };
+
+  const clearFilters = () => {
+    setTypeFilter('');
+    setRiskFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setCustomerSearch('');
+  };
+
+  const hasActiveFilters = typeFilter || riskFilter || dateFrom || dateTo || customerSearch;
+
+  // ── Client-side filter + sort ──────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let result = [...alerts];
+
+    if (typeFilter) {
+      result = result.filter(a => a.alert_type === typeFilter);
+    }
+
+    if (riskFilter === 'high')   result = result.filter(a => parseFloat(a.risk_score) >= 75);
+    if (riskFilter === 'medium') result = result.filter(a => parseFloat(a.risk_score) >= 50 && parseFloat(a.risk_score) < 75);
+    if (riskFilter === 'low')    result = result.filter(a => parseFloat(a.risk_score) < 50);
+
+    if (dateFrom) result = result.filter(a => a.alert_date >= dateFrom);
+    if (dateTo)   result = result.filter(a => a.alert_date <= dateTo);
+
+    if (customerSearch) {
+      const q = customerSearch.toLowerCase();
+      result = result.filter(a =>
+        (a.customer_name || '').toLowerCase().includes(q) ||
+        (a.customer_email || '').toLowerCase().includes(q)
+      );
+    }
+
+    result.sort((a, b) => {
+      if (sortBy === 'date_desc') return (b.alert_date || '').localeCompare(a.alert_date || '');
+      if (sortBy === 'date_asc')  return (a.alert_date || '').localeCompare(b.alert_date || '');
+      if (sortBy === 'risk_desc') return parseFloat(b.risk_score) - parseFloat(a.risk_score);
+      if (sortBy === 'risk_asc')  return parseFloat(a.risk_score) - parseFloat(b.risk_score);
+      return 0;
+    });
+
+    return result;
+  }, [alerts, typeFilter, riskFilter, dateFrom, dateTo, customerSearch, sortBy]);
 
   const getAlertColor = (type) => {
     const colors = {
@@ -331,24 +362,15 @@ function Alerts() {
 
   return (
     <div>
+      {/* ── Header ── */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Anomaly Alerts</h1>
           <p className="text-sm text-gray-400 mt-1">Usage spikes, leaks, and unusual patterns</p>
         </div>
-
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="input-field w-48"
-        >
-          <option value="all">All Alerts</option>
-          <option value="new">New</option>
-          <option value="acknowledged">Acknowledged</option>
-          <option value="resolved">Resolved</option>
-        </select>
       </div>
 
+      {/* ── Summary cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white">
           <p className="text-sm mb-1">New Alerts</p>
@@ -364,16 +386,98 @@ function Alerts() {
         </div>
       </div>
 
-      {alerts.length === 0 ? (
+      {/* ── Filter + sort bar ── */}
+      <div className="card mb-5 space-y-3">
+        {/* Row 1: status + type + risk */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Status */}
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Status</span>
+          {[['all','All'],['new','New'],['acknowledged','Acknowledged'],['resolved','Resolved']].map(([val, label]) => (
+            <Pill key={val} active={statusFilter === val} onClick={() => setStatusFilter(val)}>{label}</Pill>
+          ))}
+
+          <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
+
+          {/* Type */}
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Type</span>
+          {[['','All'],['spike','Spike'],['leak','Leak'],['unusual_pattern','Unusual']].map(([val, label]) => (
+            <Pill key={val} active={typeFilter === val} onClick={() => setTypeFilter(val)}>{label}</Pill>
+          ))}
+
+          <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
+
+          {/* Risk */}
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Risk</span>
+          {[['','All'],['high','High ≥75'],['medium','Med 50–74'],['low','Low <50']].map(([val, label]) => (
+            <Pill key={val} active={riskFilter === val} onClick={() => setRiskFilter(val)}>{label}</Pill>
+          ))}
+        </div>
+
+        {/* Row 2: date range + customer search (admin) + sort + clear */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs"
+            title="From date"
+          />
+          <span className="text-xs text-gray-400">→</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs"
+            title="To date"
+          />
+
+          {isAdmin && (
+            <input
+              type="text"
+              value={customerSearch}
+              onChange={e => setCustomerSearch(e.target.value)}
+              placeholder="Customer name / email…"
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs w-48"
+            />
+          )}
+
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sort</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs bg-white"
+            >
+              <option value="date_desc">Date — Newest first</option>
+              <option value="date_asc">Date — Oldest first</option>
+              <option value="risk_desc">Risk — Highest first</option>
+              <option value="risk_asc">Risk — Lowest first</option>
+            </select>
+
+            {hasActiveFilters && (
+              <button onClick={clearFilters}
+                className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Result count */}
+        <p className="text-xs text-gray-400">
+          Showing {filtered.length} of {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
+          {hasActiveFilters && <span className="ml-1 text-hydro-spark-blue font-medium">(filtered)</span>}
+        </p>
+      </div>
+
+      {/* ── Alert list ── */}
+      {filtered.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-xl text-gray-600">No alerts found</p>
-          <p className="text-sm text-gray-500 mt-2">
-            {filter === 'all' ? 'No anomalies detected yet' : `No ${filter} alerts`}
-          </p>
+          <p className="text-xl text-gray-600">No alerts match your filters</p>
+          <p className="text-sm text-gray-500 mt-2">Try adjusting the status, type, risk, or date range</p>
+          {hasActiveFilters && (
+            <button onClick={clearFilters}
+              className="mt-4 text-sm text-hydro-spark-blue hover:underline font-medium">
+              Clear all filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {alerts.map((alert) => (
+          {filtered.map((alert) => (
             <div key={alert.id} className={`card border-l-4 ${getAlertColor(alert.alert_type)}`}>
               <div className="flex justify-between items-start gap-4">
                 {/* Left: alert details */}
@@ -417,19 +521,14 @@ function Alerts() {
                         const sign = diff >= 0 ? '+' : '';
                         return (
                           <>
-                            <p className="font-bold text-red-600">
-                              {sign}{diff.toFixed(2)} CCF
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {sign}{pct.toFixed(1)}% vs expected
-                            </p>
+                            <p className="font-bold text-red-600">{sign}{diff.toFixed(2)} CCF</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{sign}{pct.toFixed(1)}% vs expected</p>
                           </>
                         );
                       })()}
                     </div>
                   </div>
 
-                  {/* Notes from a previous action */}
                   {alert.notes && (
                     <p className="mt-3 text-xs text-gray-500 italic bg-white border border-gray-100 rounded px-3 py-2">
                       Note: {alert.notes}
@@ -439,12 +538,8 @@ function Alerts() {
 
                 {/* Right: status, badges, action buttons */}
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  {/* Status badge */}
                   {alert.status === 'new' && (
-                    <button
-                      onClick={() => handleAcknowledge(alert.id)}
-                      className="btn-secondary"
-                    >
+                    <button onClick={() => handleAcknowledge(alert.id)} className="btn-secondary">
                       Acknowledge
                     </button>
                   )}
@@ -454,30 +549,24 @@ function Alerts() {
                     </span>
                   )}
 
-                  {/* Action taken badge */}
                   <ActionBadge alert={alert} />
 
-                  {/* Admin workflow buttons */}
                   {isAdmin && alert.status !== 'resolved' && (
                     <div className="flex gap-1.5 mt-1">
                       {alert.action_taken !== 'dispatch' && (
-                        <button
-                          onClick={() => setDispatchTarget(alert)}
+                        <button onClick={() => setDispatchTarget(alert)}
                           style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
                                    border: '1px solid #93c5fd', color: '#1d4ed8',
                                    borderRadius: '6px', background: '#eff6ff', cursor: 'pointer',
-                                   whiteSpace: 'nowrap' }}
-                        >
+                                   whiteSpace: 'nowrap' }}>
                           🔧 Dispatch
                         </button>
                       )}
-                      <button
-                        onClick={() => setCreditTarget(alert)}
+                      <button onClick={() => setCreditTarget(alert)}
                         style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
                                  border: '1px solid #6ee7b7', color: '#065f46',
                                  borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer',
-                                 whiteSpace: 'nowrap' }}
-                      >
+                                 whiteSpace: 'nowrap' }}>
                         💳 Bill Credit
                       </button>
                     </div>
@@ -489,7 +578,6 @@ function Alerts() {
         </div>
       )}
 
-      {/* ── Dispatch modal ── */}
       {dispatchTarget && (
         <DispatchModal
           alert={dispatchTarget}
@@ -498,7 +586,6 @@ function Alerts() {
         />
       )}
 
-      {/* ── Bill credit modal ── */}
       {creditTarget && (
         <BillCreditModal
           alert={creditTarget}
