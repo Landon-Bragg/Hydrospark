@@ -316,6 +316,30 @@ function BillingDashboard() {
 
   const totalPages = Math.ceil(billsTotal / PER_PAGE);
 
+  // ── Derived stats: scoped to open customer panel, else global ──────────────
+  const isFiltered = customerPanel !== null;
+  const firstOfThisMonth = (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
+
+  const displayStats = isFiltered
+    ? {
+        outstanding: {
+          count: panelBills.filter(b => ['pending', 'sent'].includes(b.status)).length,
+          total: panelBills.filter(b => ['pending', 'sent'].includes(b.status))
+            .reduce((s, b) => s + parseFloat(b.total_amount), 0),
+        },
+        overdue: {
+          count: panelBills.filter(b => b.status === 'overdue').length,
+          total: panelBills.filter(b => b.status === 'overdue')
+            .reduce((s, b) => s + parseFloat(b.total_amount), 0),
+        },
+        paid_this_month: {
+          count: panelBills.filter(b => b.status === 'paid' && b.paid_at && new Date(b.paid_at) >= firstOfThisMonth).length,
+          total: panelBills.filter(b => b.status === 'paid' && b.paid_at && new Date(b.paid_at) >= firstOfThisMonth)
+            .reduce((s, b) => s + parseFloat(b.total_amount), 0),
+        },
+      }
+    : stats;
+
   return (
     <div>
       {/* Header */}
@@ -335,22 +359,44 @@ function BillingDashboard() {
         </button>
       </div>
 
+      {/* Filter indicator */}
+      {isFiltered && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+          <span className="text-xs text-blue-500">▼</span>
+          <p className="text-sm font-semibold text-blue-800 flex-1">
+            Showing stats for: <span className="text-hydro-deep-aqua">{customerPanel.customer_name}</span>
+          </p>
+          <button
+            onClick={() => setCustomerPanel(null)}
+            className="text-xs text-blue-500 hover:text-blue-700 font-semibold"
+          >
+            Show all ×
+          </button>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="card" style={{ borderLeft: '4px solid #f59e0b' }}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Outstanding</p>
-          <p className="text-2xl font-bold text-hydro-deep-aqua">${(stats?.outstanding?.total || 0).toFixed(2)}</p>
-          <p className="text-sm text-gray-500 mt-0.5">{stats?.outstanding?.count || 0} bills pending or sent</p>
+          <p className="text-2xl font-bold text-hydro-deep-aqua">
+            ${(displayStats?.outstanding?.total || 0).toFixed(2)}
+          </p>
+          <p className="text-sm text-gray-500 mt-0.5">{displayStats?.outstanding?.count || 0} bills pending or sent</p>
         </div>
         <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Overdue</p>
-          <p className="text-2xl font-bold text-red-600">${(stats?.overdue?.total || 0).toFixed(2)}</p>
-          <p className="text-sm text-gray-500 mt-0.5">{stats?.overdue?.count || 0} bills overdue</p>
+          <p className="text-2xl font-bold text-red-600">
+            ${(displayStats?.overdue?.total || 0).toFixed(2)}
+          </p>
+          <p className="text-sm text-gray-500 mt-0.5">{displayStats?.overdue?.count || 0} bills overdue</p>
         </div>
         <div className="card" style={{ borderLeft: '4px solid #22c55e' }}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Paid This Month</p>
-          <p className="text-2xl font-bold text-green-600">${(stats?.paid_this_month?.total || 0).toFixed(2)}</p>
-          <p className="text-sm text-gray-500 mt-0.5">{stats?.paid_this_month?.count || 0} payments received</p>
+          <p className="text-2xl font-bold text-green-600">
+            ${(displayStats?.paid_this_month?.total || 0).toFixed(2)}
+          </p>
+          <p className="text-sm text-gray-500 mt-0.5">{displayStats?.paid_this_month?.count || 0} payments received</p>
         </div>
       </div>
 

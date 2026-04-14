@@ -143,6 +143,95 @@ with app.app_context():
     seed_default_users()
 
 
+def seed_sample_bills():
+    """Create a handful of unpaid/overdue sample bills if none exist yet."""
+    from database import Bill, Customer, WaterUsage
+    from services.billing_service import BillingService
+    from datetime import date, timedelta
+    import calendar
+
+    try:
+        existing_unpaid = Bill.query.filter(
+            Bill.status.in_(['pending', 'overdue', 'sent'])
+        ).count()
+        if existing_unpaid > 0:
+            print(f'[seed_bills] {existing_unpaid} unpaid bill(s) already exist — skipping.')
+            return
+
+        svc = BillingService()
+
+        # Pick customers that have usage records
+        customers = (
+            db.session.query(Customer)
+            .join(WaterUsage, WaterUsage.customer_id == Customer.id)
+            .distinct()
+            .limit(5)
+            .all()
+        )
+
+        if not customers:
+            print('[seed_bills] No customers with usage data — skipping.')
+            return
+
+        created = 0
+        for i, customer in enumerate(customers):
+            # Find the customer's most recent usage month
+            latest = (
+                db.session.query(WaterUsage.year, WaterUsage.month)
+                .filter(WaterUsage.customer_id == customer.id)
+                .order_by(WaterUsage.year.desc(), WaterUsage.month.desc())
+                .first()
+            )
+            if not latest:
+                continue
+
+            year, month = latest.year, latest.month
+            start = date(year, month, 1)
+            last_day = calendar.monthrange(year, month)[1]
+            end = date(year, month, last_day)
+
+            # Skip if a bill already covers this period
+            if Bill.query.filter(
+                Bill.customer_id == customer.id,
+                Bill.billing_period_start == start,
+            ).first():
+                continue
+
+            calc = svc.calculate_bill(customer.id, start, end)
+            if not calc or calc['total_usage_ccf'] == 0:
+                continue
+
+            # Vary: first two overdue (past due), rest pending
+            if i < 2:
+                status = 'overdue'
+                due = end - timedelta(days=15)      # already past due
+            else:
+                status = 'pending'
+                due = end + timedelta(days=30)
+
+            bill = Bill(
+                customer_id=customer.id,
+                billing_period_start=start,
+                billing_period_end=end,
+                total_usage_ccf=calc['total_usage_ccf'],
+                total_amount=calc['total_amount'],
+                due_date=due,
+                status=status,
+            )
+            db.session.add(bill)
+            created += 1
+
+        db.session.commit()
+        print(f'[seed_bills] Created {created} sample unpaid bill(s).')
+    except Exception as e:
+        db.session.rollback()
+        print(f'[seed_bills] Error: {e}')
+
+
+with app.app_context():
+    seed_sample_bills()
+
+
 
 # Import and register blueprints
 from routes.auth import auth_bp
