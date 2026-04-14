@@ -304,6 +304,10 @@ function Usage() {
   const [anomalyAlerts, setAnomalyAlerts] = useState([]);
   const [anomalyExpanded, setAnomalyExpanded] = useState(false);
 
+  // Top customers chart filters
+  const [topTypeFilter, setTopTypeFilter] = useState('');        // '' | 'Residential' | 'Municipal' | 'Commercial'
+  const [topLimit, setTopLimit] = useState(15);                  // 15 | 25 | 50 | 0 = all
+
   // Download modal state
   const [showDownload, setShowDownload] = useState(false);
   const [dlFrom, setDlFrom] = useState(() => {
@@ -439,15 +443,18 @@ function Usage() {
       .slice(0, 8);
   }, [customerSearch, allCustomers]);
 
-  const topChartData = useMemo(() =>
-    topCustomers.slice(0, 15).map(c => ({
+  const topChartData = useMemo(() => {
+    let filtered = topTypeFilter
+      ? topCustomers.filter(c => c.customer_type === topTypeFilter)
+      : topCustomers;
+    if (topLimit > 0) filtered = filtered.slice(0, topLimit);
+    return filtered.map(c => ({
       name: c.customer_name.length > 22 ? c.customer_name.slice(0, 20) + '…' : c.customer_name,
       fullName: c.customer_name,
       usage: parseFloat(c.total_usage_ccf.toFixed(2)),
       type: c.customer_type,
-    })),
-    [topCustomers]
-  );
+    }));
+  }, [topCustomers, topTypeFilter, topLimit]);
 
   const myDailyChart = useMemo(() => {
     if (!myUsage.length) return [];
@@ -596,9 +603,36 @@ function Usage() {
 
           {/* Top customers horizontal bar chart */}
           <div className="card mb-6">
-            <h2 className="text-xl font-semibold mb-4">Top 15 Customers by Usage</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <h2 className="text-xl font-semibold">
+                Top {topLimit === 0 ? 'All' : topLimit} Customers by Usage
+                {topTypeFilter && <span className="text-base font-normal text-gray-400 ml-2">— {topTypeFilter}</span>}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Type filter */}
+                <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                  {[['', 'All'], ['Residential', 'Residential'], ['Municipal', 'Municipal'], ['Commercial', 'Commercial']].map(([val, label]) => (
+                    <button key={val} onClick={() => setTopTypeFilter(val)} className="px-2.5 py-1"
+                      style={topTypeFilter === val
+                        ? { background: '#0A4C78', color: '#fff' }
+                        : { background: '#fff', color: '#374151' }}
+                    >{label}</button>
+                  ))}
+                </div>
+                {/* Count limit */}
+                <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                  {[[15, 'Top 15'], [25, 'Top 25'], [50, 'Top 50'], [0, 'All']].map(([val, label]) => (
+                    <button key={val} onClick={() => setTopLimit(val)} className="px-2.5 py-1"
+                      style={topLimit === val
+                        ? { background: '#0A4C78', color: '#fff' }
+                        : { background: '#fff', color: '#374151' }}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
             {topChartData.length === 0 ? (
-              <p className="text-gray-500">No usage data found for this period.</p>
+              <p className="text-gray-500">No usage data found for this period{topTypeFilter ? ` (${topTypeFilter})` : ''}.</p>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(300, topChartData.length * 30)}>
                 <BarChart

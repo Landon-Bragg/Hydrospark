@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   adminSearchBills, updateBill, refundBill, sendNotification,
@@ -73,8 +73,12 @@ function BillingDashboard() {
   const [panelUsage, setPanelUsage] = useState([]);   // all months, sorted desc
   const [panelAlerts, setPanelAlerts] = useState([]);
   const [panelLoading, setPanelLoading] = useState(false);
-  const [panelRange, setPanelRange] = useState(6);    // months to show: 3 | 6 | 12 | 0 = all
+  const [panelRange, setPanelRange] = useState(6);       // months: 3 | 6 | 12 | 0 = all
   const [panelMetric, setPanelMetric] = useState('ccf'); // 'ccf' | 'amount'
+  const [panelDailyUsage, setPanelDailyUsage] = useState([]);  // raw daily records
+  const [panelYear, setPanelYear] = useState('all');
+  const [panelGranularity, setPanelGranularity] = useState('monthly'); // 'monthly' | 'daily'
+  const [panelDailyRange, setPanelDailyRange] = useState(90); // days: 30 | 90 | 365 | 0 = all
 
   useEffect(() => {
     fetchStats();
@@ -280,6 +284,7 @@ function BillingDashboard() {
 
       // Aggregate daily usage into monthly totals
       const usageData = usageRes.data.usage || [];
+      setPanelDailyUsage(usageData);
       const monthMap = {};
       usageData.forEach(u => {
         const key = `${u.year}-${String(u.month).padStart(2, '0')}`;
@@ -311,6 +316,9 @@ function BillingDashboard() {
     setPanelAlerts([]);
     setPanelRange(6);
     setPanelMetric('ccf');
+    setPanelGranularity('monthly');
+    setPanelDailyRange(90);
+    setPanelYear('all');
     refreshPanel(info);
   };
 
@@ -642,73 +650,177 @@ function BillingDashboard() {
 
                 {/* Usage summary */}
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  {/* ── Filter controls ── */}
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-3">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Usage History</p>
-                    <div className="flex items-center gap-2">
-                      {/* Metric toggle */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+
+                      {/* Granularity toggle */}
                       <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
-                        {[['ccf', 'CCF'], ['amount', 'Amount']].map(([val, label]) => (
-                          <button
-                            key={val}
-                            onClick={() => setPanelMetric(val)}
+                        {[['monthly', 'Monthly'], ['daily', 'Daily']].map(([val, label]) => (
+                          <button key={val}
+                            onClick={() => {
+                              setPanelGranularity(val);
+                              if (val === 'daily') setPanelMetric('ccf');
+                            }}
                             className="px-2 py-1"
-                            style={panelMetric === val
+                            style={panelGranularity === val
                               ? { background: '#0A4C78', color: '#fff' }
                               : { background: '#fff', color: '#374151' }}
                           >{label}</button>
                         ))}
                       </div>
+
+                      {/* Metric toggle — monthly only */}
+                      {panelGranularity === 'monthly' && (
+                        <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                          {[['ccf', 'CCF'], ['amount', '$']].map(([val, label]) => (
+                            <button key={val}
+                              onClick={() => setPanelMetric(val)}
+                              className="px-2 py-1"
+                              style={panelMetric === val
+                                ? { background: '#0A4C78', color: '#fff' }
+                                : { background: '#fff', color: '#374151' }}
+                            >{label}</button>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Range buttons */}
                       <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
-                        {[[3,'3m'],[6,'6m'],[12,'12m'],[0,'All']].map(([val, label]) => (
-                          <button
-                            key={val}
-                            onClick={() => setPanelRange(val)}
-                            className="px-2 py-1"
-                            style={panelRange === val
-                              ? { background: '#0A4C78', color: '#fff' }
-                              : { background: '#fff', color: '#374151' }}
-                          >{label}</button>
-                        ))}
+                        {panelGranularity === 'monthly'
+                          ? [[3,'3m'],[6,'6m'],[12,'12m'],[0,'All']].map(([val, label]) => (
+                              <button key={val} onClick={() => setPanelRange(val)} className="px-2 py-1"
+                                style={panelRange === val
+                                  ? { background: '#0A4C78', color: '#fff' }
+                                  : { background: '#fff', color: '#374151' }}
+                              >{label}</button>
+                            ))
+                          : [[30,'30d'],[90,'90d'],[365,'1yr'],[0,'All']].map(([val, label]) => (
+                              <button key={val} onClick={() => setPanelDailyRange(val)} className="px-2 py-1"
+                                style={panelDailyRange === val
+                                  ? { background: '#0A4C78', color: '#fff' }
+                                  : { background: '#fff', color: '#374151' }}
+                              >{label}</button>
+                            ))
+                        }
                       </div>
+
+                      {/* Year filter */}
+                      {(() => {
+                        const years = [...new Set(panelUsage.map(u => u.year))].sort((a, b) => b - a);
+                        if (years.length < 2) return null;
+                        return (
+                          <select value={panelYear} onChange={e => setPanelYear(e.target.value)}
+                            style={{ border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '11px',
+                                     padding: '2px 6px', background: '#fff', color: '#374151' }}>
+                            <option value="all">All Years</option>
+                            {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
+                          </select>
+                        );
+                      })()}
+
                     </div>
                   </div>
+
+                  {/* ── Chart ── */}
                   {panelUsage.length === 0 ? (
                     <p className="text-sm text-gray-400">No usage data found.</p>
                   ) : (() => {
-                    const sorted = [...panelUsage].sort((a, b) =>
-                      a.year !== b.year ? a.year - b.year : a.month - b.month
-                    );
-                    const sliced = panelRange === 0 ? sorted : sorted.slice(-panelRange);
-                    const chartData = sliced.map(u => {
-                      const matchBill = panelBills.find(b => {
-                        const d = new Date(b.billing_period_end);
-                        return d.getFullYear() === u.year && (d.getMonth() + 1) === u.month;
+                    let chartData;
+
+                    if (panelGranularity === 'monthly') {
+                      const sorted = [...panelUsage].sort((a, b) =>
+                        a.year !== b.year ? a.year - b.year : a.month - b.month
+                      );
+                      const yearFiltered = panelYear === 'all'
+                        ? sorted
+                        : sorted.filter(u => u.year === parseInt(panelYear));
+                      const sliced = panelRange === 0 ? yearFiltered : yearFiltered.slice(-panelRange);
+                      chartData = sliced.map(u => {
+                        const matchBill = panelBills.find(b => {
+                          const d = new Date(b.billing_period_end);
+                          return d.getFullYear() === u.year && (d.getMonth() + 1) === u.month;
+                        });
+                        return {
+                          label: `${MONTH_NAMES[u.month]} ${String(u.year).slice(2)}`,
+                          ccf: parseFloat(u.total.toFixed(2)),
+                          amount: matchBill ? parseFloat(parseFloat(matchBill.total_amount).toFixed(2)) : 0,
+                        };
                       });
-                      return {
-                        label: `${MONTH_NAMES[u.month]} ${u.year}`,
-                        ccf: parseFloat(u.total.toFixed(2)),
-                        amount: matchBill ? parseFloat(parseFloat(matchBill.amount).toFixed(2)) : 0,
-                      };
-                    });
-                    const dataKey = panelMetric === 'ccf' ? 'ccf' : 'amount';
-                    const tickFmt = panelMetric === 'amount'
-                      ? (v) => `$${v}`
-                      : (v) => `${v}`;
+                    } else {
+                      // Daily mode — aggregate raw records by date
+                      const dayMap = {};
+                      panelDailyUsage.forEach(u => {
+                        if (!u.usage_date) return;
+                        dayMap[u.usage_date] = (dayMap[u.usage_date] || 0) + parseFloat(u.daily_usage_ccf);
+                      });
+                      let entries = Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b));
+                      if (panelYear !== 'all') {
+                        entries = entries.filter(([d]) => d.startsWith(panelYear));
+                      }
+                      const sliced = panelDailyRange === 0 ? entries : entries.slice(-panelDailyRange);
+                      const avg = sliced.length > 0
+                        ? sliced.reduce((s, [, v]) => s + v, 0) / sliced.length : 0;
+                      chartData = sliced.map(([date, ccf]) => ({
+                        label: date.slice(5),   // MM-DD
+                        fullDate: date,
+                        ccf: parseFloat(ccf.toFixed(2)),
+                        color: ccf > avg * 1.3 ? '#ef4444' : ccf > avg ? '#f59e0b' : '#1ea7d6',
+                      }));
+                    }
+
+                    const dataKey = panelGranularity === 'daily' ? 'ccf'
+                      : panelMetric === 'amount' ? 'amount' : 'ccf';
+                    const tickFmt = panelMetric === 'amount' && panelGranularity === 'monthly'
+                      ? (v) => `$${v}` : (v) => `${v}`;
+                    const isDailyMode = panelGranularity === 'daily';
+                    const labelInterval = isDailyMode
+                      ? Math.max(0, Math.floor(chartData.length / 10) - 1) : 0;
+
                     return (
-                      <ResponsiveContainer width="100%" height={180}>
-                        <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <ResponsiveContainer width="100%" height={isDailyMode ? 210 : 180}>
+                        <BarChart data={chartData}
+                          margin={{ top: 4, right: 8, left: 0, bottom: isDailyMode ? 24 : 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} tickFormatter={tickFmt} width={panelMetric === 'amount' ? 48 : 32} />
-                          <Tooltip
-                            formatter={(value) => panelMetric === 'amount' ? [`$${value}`, 'Amount'] : [`${value} CCF`, 'Usage']}
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={labelInterval}
+                            angle={isDailyMode ? -45 : 0}
+                            textAnchor={isDailyMode ? 'end' : 'middle'}
                           />
-                          <Bar dataKey={dataKey} fill="#0A4C78" radius={[3, 3, 0, 0]} />
+                          <YAxis tick={{ fontSize: 10 }} tickFormatter={tickFmt}
+                            width={panelMetric === 'amount' && !isDailyMode ? 50 : 36}
+                          />
+                          <Tooltip
+                            formatter={(value) =>
+                              panelMetric === 'amount' && !isDailyMode
+                                ? [`$${value}`, 'Amount']
+                                : [`${value} CCF`, 'Usage']
+                            }
+                            labelFormatter={(label, payload) =>
+                              payload?.[0]?.payload?.fullDate || label
+                            }
+                          />
+                          {isDailyMode ? (
+                            <Bar dataKey={dataKey} radius={[2, 2, 0, 0]}>
+                              {chartData.map((entry, i) => (
+                                <Cell key={i} fill={entry.color || '#1ea7d6'} />
+                              ))}
+                            </Bar>
+                          ) : (
+                            <Bar dataKey={dataKey} fill="#0A4C78" radius={[3, 3, 0, 0]} />
+                          )}
                         </BarChart>
                       </ResponsiveContainer>
                     );
                   })()}
+
+                  {panelGranularity === 'daily' && (
+                    <div className="flex gap-3 text-xs text-gray-400 mt-1">
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-sky-400 mr-1" />Normal</span>
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-400 mr-1" />Above avg</span>
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-red-500 mr-1" />30%+ above avg</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Alerts */}
