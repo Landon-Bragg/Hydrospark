@@ -30,7 +30,20 @@ function ChatBot() {
   const bottomRef = useRef(null);
 
   const suggestions = user?.role === 'customer' ? CUSTOMER_SUGGESTIONS : ADMIN_SUGGESTIONS;
-  const hasUserMessages = messages.some(m => m.role === 'user');
+
+  // Pick which suggestions to show after the latest response.
+  // On the welcome message show all. After each exchange rotate a set of 4
+  // so the chips feel fresh without needing AI context.
+  const visibleSuggestions = (() => {
+    const assistantCount = messages.filter(m => m.role === 'assistant').length;
+    if (assistantCount <= 1) return suggestions;                        // initial: show all
+    const lastUserText = messages.filter(m => m.role === 'user').slice(-1)[0]?.content;
+    const pool = suggestions.filter(s => s !== lastUserText);           // drop just-asked
+    const offset = ((assistantCount - 1) * 3) % pool.length;
+    const shown = [];
+    for (let i = 0; shown.length < 4; i++) shown.push(pool[(offset + i) % pool.length]);
+    return shown;
+  })();
 
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -114,15 +127,22 @@ function ChatBot() {
               </div>
             ))}
 
-            {/* Suggestion chips — only before first user message */}
-            {!hasUserMessages && (
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-400 px-3 py-2 rounded-xl rounded-bl-sm text-sm">
+                  <span className="animate-pulse">• • •</span>
+                </div>
+              </div>
+            )}
+
+            {/* Suggestion chips — repopulate after every assistant response */}
+            {!loading && messages[messages.length - 1]?.role === 'assistant' && (
               <div className="pt-1 flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
+                {visibleSuggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    disabled={loading}
-                    className="text-xs px-2.5 py-1.5 rounded-full border transition-all disabled:opacity-40"
+                    className="text-xs px-2.5 py-1.5 rounded-full border transition-all"
                     style={{
                       borderColor: 'rgba(30,167,214,0.35)',
                       color: '#0A4C78',
@@ -140,14 +160,6 @@ function ChatBot() {
                     {s}
                   </button>
                 ))}
-              </div>
-            )}
-
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 text-gray-400 px-3 py-2 rounded-xl rounded-bl-sm text-sm">
-                  <span className="animate-pulse">• • •</span>
-                </div>
               </div>
             )}
             <div ref={bottomRef} />
