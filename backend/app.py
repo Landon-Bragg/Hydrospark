@@ -100,6 +100,7 @@ def run_migrations():
         ("anomaly_alerts", "dispatched_at",           "DATETIME NULL"),
         ("anomaly_alerts", "notes",                   "TEXT NULL"),
         ("anomaly_alerts", "bill_adjustment_amount",  "DECIMAL(10,2) NULL"),
+        ("bills",          "refunded_at",             "DATETIME NULL"),
     ]
     try:
         with db.engine.connect() as conn:
@@ -143,93 +144,165 @@ with app.app_context():
     seed_default_users()
 
 
-def seed_sample_bills():
-    """Create a handful of unpaid/overdue sample bills if none exist yet."""
-    from database import Bill, Customer, WaterUsage
+def seed_bills_and_alerts():
+    """
+    Seed realistic billing history and anomaly alerts on a fresh DB.
+
+    Bills  — skipped if any bills already exist.
+      • Up to 20 customers with usage data get 6 months of billing history.
+      • Months 1-4: paid (paid_at set a few days after due date).
+      • Month 5:    ~75 % pending, ~25 % overdue (due date already past).
+      • Month 6:    pending (current cycle, not yet due).
+
+    Alerts — skipped if any anomaly alerts already exist.
+      • Runs IsolationForest detection over last 365 days for every customer
+        that has at least 14 days of usage data.
+    """
+    from database import Bill, Customer, WaterUsage, AnomalyAlert
     from services.billing_service import BillingService
-    from datetime import date, timedelta
+    from services.ml_service import MLService
+    from datetime import date, timedelta, datetime
     import calendar
 
+    # ── Bills ────────────────────────────────────────────────────────────────
+    # Goal: realistic distribution — most bills paid, ~15–20 % pending/overdue.
+    # If the auto-importer already created bills (all paid), we promote the most
+    # recent bill per customer (up to 20 customers) to pending or overdue so the
+    # dashboard has meaningful outstanding balances to show.
     try:
-        existing_unpaid = Bill.query.filter(
+        unpaid_count = Bill.query.filter(
             Bill.status.in_(['pending', 'overdue', 'sent'])
         ).count()
-        if existing_unpaid > 0:
-            print(f'[seed_bills] {existing_unpaid} unpaid bill(s) already exist — skipping.')
-            return
 
-        svc = BillingService()
-
-        # Pick customers that have usage records
-        customers = (
-            db.session.query(Customer)
-            .join(WaterUsage, WaterUsage.customer_id == Customer.id)
-            .distinct()
-            .limit(5)
-            .all()
-        )
-
-        if not customers:
-            print('[seed_bills] No customers with usage data — skipping.')
-            return
-
-        created = 0
-        for i, customer in enumerate(customers):
-            # Find the customer's most recent usage month
-            latest = (
-                db.session.query(WaterUsage.year, WaterUsage.month)
-                .filter(WaterUsage.customer_id == customer.id)
-                .order_by(WaterUsage.year.desc(), WaterUsage.month.desc())
-                .first()
+        if unpaid_count > 5:
+            print(f'[seed_bills] {unpaid_count} unpaid bill(s) already exist — skipping.')
+        elif Bill.query.count() == 0:
+            # No bills at all — create full history for up to 20 customers
+            svc = BillingService()
+            customers = (
+                db.session.query(Customer)
+                .join(WaterUsage, WaterUsage.customer_id == Customer.id)
+                .distinct()
+                .limit(20)
+                .all()
             )
-            if not latest:
-                continue
-
-            year, month = latest.year, latest.month
-            start = date(year, month, 1)
-            last_day = calendar.monthrange(year, month)[1]
-            end = date(year, month, last_day)
-
-            # Skip if a bill already covers this period
-            if Bill.query.filter(
-                Bill.customer_id == customer.id,
-                Bill.billing_period_start == start,
-            ).first():
-                continue
-
-            calc = svc.calculate_bill(customer.id, start, end)
-            if not calc or calc['total_usage_ccf'] == 0:
-                continue
-
-            # Vary: first two overdue (past due), rest pending
-            if i < 2:
-                status = 'overdue'
-                due = end - timedelta(days=15)      # already past due
+            if not customers:
+                print('[seed_bills] No customers with usage data — skipping.')
             else:
-                status = 'pending'
-                due = end + timedelta(days=30)
-
-            bill = Bill(
-                customer_id=customer.id,
-                billing_period_start=start,
-                billing_period_end=end,
-                total_usage_ccf=calc['total_usage_ccf'],
-                total_amount=calc['total_amount'],
-                due_date=due,
-                status=status,
+                bill_count = 0
+                for idx, customer in enumerate(customers):
+                    months = (
+                        db.session.query(WaterUsage.year, WaterUsage.month)
+                        .filter(WaterUsage.customer_id == customer.id)
+                        .distinct()
+                        .order_by(WaterUsage.year.desc(), WaterUsage.month.desc())
+                        .limit(6)
+                        .all()
+                    )
+                    if not months:
+                        continue
+                    months = list(reversed(months))
+                    total = len(months)
+                    for i, (yr, mo) in enumerate(months):
+                        start = date(yr, mo, 1)
+                        last_day = calendar.monthrange(yr, mo)[1]
+                        end = date(yr, mo, last_day)
+                        due = end + timedelta(days=21)
+                        if Bill.query.filter_by(customer_id=customer.id, billing_period_start=start).first():
+                            continue
+                        calc = svc.calculate_bill(customer.id, start, end)
+                        if not calc or calc['total_usage_ccf'] == 0:
+                            continue
+                        months_from_end = total - 1 - i
+                        if months_from_end >= 2:
+                            status = 'paid'
+                            paid_at = datetime.combine(due + timedelta(days=3), datetime.min.time())
+                        elif months_from_end == 1:
+                            if idx % 4 == 0:
+                                status = 'overdue'
+                                due = end + timedelta(days=5)
+                            else:
+                                status = 'pending'
+                            paid_at = None
+                        else:
+                            status = 'pending'
+                            paid_at = None
+                        db.session.add(Bill(
+                            customer_id=customer.id,
+                            billing_period_start=start,
+                            billing_period_end=end,
+                            total_usage_ccf=calc['total_usage_ccf'],
+                            total_amount=calc['total_amount'],
+                            due_date=due,
+                            status=status,
+                            paid_at=paid_at,
+                        ))
+                        bill_count += 1
+                db.session.commit()
+                print(f'[seed_bills] Created {bill_count} bill(s) across {len(customers)} customer(s).')
+        else:
+            # Bills exist but are all paid — promote the most-recent bill for
+            # up to 20 customers to pending/overdue so there's outstanding data.
+            from sqlalchemy import func
+            customers_with_bills = (
+                db.session.query(Customer)
+                .join(Bill, Bill.customer_id == Customer.id)
+                .filter(Bill.status == 'paid')
+                .distinct()
+                .limit(20)
+                .all()
             )
-            db.session.add(bill)
-            created += 1
-
-        db.session.commit()
-        print(f'[seed_bills] Created {created} sample unpaid bill(s).')
+            promoted = 0
+            for idx, customer in enumerate(customers_with_bills):
+                latest_bill = (
+                    Bill.query
+                    .filter_by(customer_id=customer.id, status='paid')
+                    .order_by(Bill.billing_period_start.desc())
+                    .first()
+                )
+                if not latest_bill:
+                    continue
+                if idx % 4 == 0:
+                    latest_bill.status = 'overdue'
+                    latest_bill.due_date = latest_bill.billing_period_end + timedelta(days=5)
+                else:
+                    latest_bill.status = 'pending'
+                    latest_bill.due_date = latest_bill.billing_period_end + timedelta(days=21)
+                latest_bill.paid_at = None
+                promoted += 1
+            db.session.commit()
+            print(f'[seed_bills] Promoted {promoted} bill(s) to pending/overdue for realistic distribution.')
     except Exception as e:
         db.session.rollback()
-        print(f'[seed_bills] Error: {e}')
+        print(f'[seed_bills] Error seeding bills: {e}')
+
+    # ── Alerts ───────────────────────────────────────────────────────────────
+    try:
+        if AnomalyAlert.query.count() > 0:
+            print('[seed_alerts] Anomaly alerts already exist — skipping alert seeding.')
+        else:
+            ml = MLService()
+
+            all_customers = (
+                db.session.query(Customer)
+                .join(WaterUsage, WaterUsage.customer_id == Customer.id)
+                .distinct()
+                .all()
+            )
+
+            alert_count = 0
+            for customer in all_customers:
+                found = ml.detect_anomalies(customer.id, lookback_days=365)
+                alert_count += len(found)
+
+            print(f'[seed_alerts] Generated {alert_count} anomaly alert(s) across {len(all_customers)} customer(s).')
+    except Exception as e:
+        db.session.rollback()
+        print(f'[seed_alerts] Error seeding alerts: {e}')
 
 
 with app.app_context():
-    seed_sample_bills()
+    seed_bills_and_alerts()
 
 
 

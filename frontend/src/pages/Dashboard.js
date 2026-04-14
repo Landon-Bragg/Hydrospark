@@ -135,36 +135,20 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="card">
-            <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">Quick Actions</h2>
-            <div className="space-y-3">
-              <button className="w-full btn-primary text-left px-4 py-3" onClick={() => window.location.href = '/admin'}>
-                📊 Manage Users
-              </button>
-              <button className="w-full btn-primary text-left px-4 py-3" onClick={() => window.location.href = '/admin'}>
-                🚨 Run Anomaly Detection
-              </button>
-              <button className="w-full btn-primary text-left px-4 py-3" onClick={() => window.location.href = '/admin'}>
-                💰 Generate Bills
-              </button>
+        <div className="card">
+          <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">System Status</h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
+              <span className="font-semibold">Database</span>
+              <span className="text-green-600">✓ Connected</span>
             </div>
-          </div>
-          <div className="card">
-            <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">System Status</h2>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-                <span className="font-semibold">Database</span>
-                <span className="text-green-600">✓ Connected</span>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-                <span className="font-semibold">API</span>
-                <span className="text-green-600">✓ Running</span>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-                <span className="font-semibold">ML Models</span>
-                <span className="text-green-600">✓ Ready</span>
-              </div>
+            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
+              <span className="font-semibold">API</span>
+              <span className="text-green-600">✓ Running</span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
+              <span className="font-semibold">ML Models</span>
+              <span className="text-green-600">✓ Ready</span>
             </div>
           </div>
         </div>

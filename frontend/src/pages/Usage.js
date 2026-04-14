@@ -400,7 +400,7 @@ function Usage() {
     try {
       const params = getDateParams(dateRange);
       const [topRes, customersRes, alertsRes] = await Promise.all([
-        getTopCustomers(params),
+        getTopCustomers({ ...params, limit: 200 }),
         getAdminCharges(),
         getAlerts({ limit: 20 }).catch(() => ({ data: { alerts: [] } })),
       ]);
