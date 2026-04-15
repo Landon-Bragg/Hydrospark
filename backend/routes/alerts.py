@@ -46,12 +46,13 @@ def get_alerts():
             query = query.filter(AnomalyAlert.status == status)
         if alert_type:
             query = query.filter(AnomalyAlert.alert_type == alert_type)
+        ccf_diff = AnomalyAlert.usage_ccf - AnomalyAlert.expected_usage_ccf
         if risk_level == 'high':
-            query = query.filter(AnomalyAlert.risk_score >= 75)
+            query = query.filter(ccf_diff > 5)
         elif risk_level == 'medium':
-            query = query.filter(AnomalyAlert.risk_score >= 50, AnomalyAlert.risk_score < 75)
+            query = query.filter(ccf_diff >= 1, ccf_diff <= 5)
         elif risk_level == 'low':
-            query = query.filter(AnomalyAlert.risk_score < 50)
+            query = query.filter(ccf_diff < 1)
         if date_from:
             query = query.filter(AnomalyAlert.alert_date >= date_from)
         if date_to:

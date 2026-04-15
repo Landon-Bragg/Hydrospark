@@ -379,16 +379,16 @@ function Alerts() {
     spike: { border: '#ef4444', bg: '#fef2f2', label: 'Spike', icon: '⚡' },
   };
 
-  const getRiskColor = (score) => {
-    if (score >= 75) return '#dc2626';
-    if (score >= 50) return '#ea580c';
+  const getRiskColor = (ccfDiff) => {
+    if (ccfDiff > 5)  return '#dc2626';
+    if (ccfDiff >= 1) return '#ea580c';
     return '#ca8a04';
   };
 
-  const getRiskLabel = (score) => {
-    if (score >= 75) return 'High';
-    if (score >= 50) return 'Medium';
-    return 'Low';
+  const getRiskLabel = (ccfDiff) => {
+    if (ccfDiff > 5)  return '>5 CCF';
+    if (ccfDiff >= 1) return '1–5 CCF';
+    return '<1 CCF';
   };
 
   const fmtDate = (iso) => {
@@ -469,7 +469,7 @@ function Alerts() {
           <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
 
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Risk</span>
-          {[['','All'],['high','High ≥75'],['medium','Med 50–74'],['low','Low <50']].map(([val, label]) => (
+          {[['','All'],['high','>5 CCF'],['medium','1–5 CCF'],['low','<1 CCF']].map(([val, label]) => (
             <Pill key={val} active={riskFilter === val} onClick={() => handleRiskFilter(val)}>{label}</Pill>
           ))}
         </div>
@@ -548,7 +548,6 @@ function Alerts() {
               const pct     = parseFloat(alert.deviation_percentage);
               const sign    = diff >= 0 ? '+' : '';
               const isOpen  = expanded === alert.id;
-              const rScore  = parseFloat(alert.risk_score);
 
               return (
                 <div key={alert.id}
@@ -562,10 +561,10 @@ function Alerts() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
                                   flexShrink: 0, paddingTop: '2px' }}>
                       <span style={{ fontSize: '22px', lineHeight: 1 }}>{style.icon}</span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: getRiskColor(rScore),
-                                     background: `${getRiskColor(rScore)}18`, padding: '1px 6px',
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: getRiskColor(diff),
+                                     background: `${getRiskColor(diff)}18`, padding: '1px 6px',
                                      borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                        {getRiskLabel(rScore)} {rScore.toFixed(0)}
+                        {getRiskLabel(diff)}
                       </span>
                     </div>
 

@@ -309,11 +309,14 @@ def purge_low_usage_alerts():
     from database import AnomalyAlert
     try:
         deleted = AnomalyAlert.query.filter(
-            AnomalyAlert.alert_type.in_(['unusual_pattern', 'leak'])
+            db.or_(
+                AnomalyAlert.alert_type.in_(['unusual_pattern', 'leak']),
+                AnomalyAlert.deviation_percentage < 60,
+            )
         ).delete(synchronize_session=False)
         db.session.commit()
         if deleted:
-            print(f'[purge_alerts] Removed {deleted} low-usage alerts (unusual_pattern / leak)')
+            print(f'[purge_alerts] Removed {deleted} sub-threshold alerts')
     except Exception as e:
         db.session.rollback()
         print(f'[purge_alerts] Error: {e}')
