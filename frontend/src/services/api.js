@@ -46,7 +46,7 @@ export const savePaymentMethod = (data) => api.post('/billing/payment-method', d
 export const deletePaymentMethod = () => api.delete('/billing/payment-method');
 export const toggleAutopay = (enabled) => api.post('/billing/autopay', { enabled });
 export const adminSearchBills = (params) => api.get('/billing/admin/bills', { params });
-export const getBillingStats = () => api.get('/billing/stats');
+export const getBillingStats = (params) => api.get('/billing/stats', { params });
 export const generateBill = (data) => api.post('/billing/generate', data);
 export const updateBill = (id, data) => api.put(`/billing/bills/${id}`, data);
 export const refundBill = (id) => api.post(`/billing/bills/${id}/refund`);
