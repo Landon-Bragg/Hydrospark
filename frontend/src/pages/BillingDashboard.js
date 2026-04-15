@@ -98,9 +98,9 @@ function BillingDashboard() {
     return () => clearTimeout(timer);
   }, [billsSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchStats = async () => {
+  const fetchStats = async (filterParams = {}) => {
     try {
-      const res = await getBillingStats();
+      const res = await getBillingStats(filterParams);
       setStats(res.data);
     } catch (e) {}
   };
@@ -120,15 +120,31 @@ function BillingDashboard() {
     finally { setBillsLoading(false); }
   }, [billsDateFrom, billsDateTo, billsCustomerType]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Helper: build the non-status filter params for the stats endpoint
+  const statsParams = (overrides = {}) => {
+    const p = {};
+    const df = overrides.date_from     !== undefined ? overrides.date_from     : billsDateFrom;
+    const dt = overrides.date_to       !== undefined ? overrides.date_to       : billsDateTo;
+    const ct = overrides.customer_type !== undefined ? overrides.customer_type : billsCustomerType;
+    const sr = overrides.search        !== undefined ? overrides.search        : billsSearch;
+    if (df) p.date_from     = df;
+    if (dt) p.date_to       = dt;
+    if (ct) p.customer_type = ct;
+    if (sr) p.search        = sr;
+    return p;
+  };
+
   const handleStatusFilter = (status) => {
     setBillsStatus(status);
     setBillsPage(1);
     fetchBills(1, billsSearch, status, billsDateFrom, billsDateTo, billsCustomerType);
+    // Stats are not scoped by status (cards show per-status breakdown), no fetchStats needed
   };
 
   const handleApplyFilters = () => {
     setBillsPage(1);
     fetchBills(1, billsSearch, billsStatus, billsDateFrom, billsDateTo, billsCustomerType);
+    fetchStats(statsParams());
   };
 
   const handleClearFilters = () => {
@@ -137,6 +153,7 @@ function BillingDashboard() {
     setBillsCustomerType('');
     setBillsPage(1);
     fetchBills(1, billsSearch, billsStatus, '', '', '');
+    fetchStats(statsParams({ date_from: '', date_to: '', customer_type: '' }));
   };
 
   const handlePage = (newPage) => {
@@ -328,11 +345,15 @@ function BillingDashboard() {
 
   const totalPages = Math.ceil(billsTotal / PER_PAGE);
 
-  // ── Derived stats: scoped to open customer panel, else global ──────────────
-  const isFiltered = customerPanel !== null;
+  // ── Derived stats ──────────────────────────────────────────────────────────
+  // Priority: open customer panel > active table filters > global
+  const isTableFiltered = !!(billsDateFrom || billsDateTo || billsCustomerType || billsSearch);
+  const isFiltered = customerPanel !== null || isTableFiltered;
   const firstOfThisMonth = (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
 
-  const displayStats = isFiltered
+  // When a customer panel is open, compute stats from the customer's fetched bills.
+  // Otherwise, `stats` already reflects any active table filters (updated in handleApplyFilters etc.)
+  const displayStats = customerPanel !== null
     ? {
         outstanding: {
           count: panelBills.filter(b => ['pending', 'sent'].includes(b.status)).length,
@@ -376,10 +397,23 @@ function BillingDashboard() {
         <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
           <span className="text-xs text-blue-500">▼</span>
           <p className="text-sm font-semibold text-blue-800 flex-1">
-            Showing stats for: <span className="text-hydro-deep-aqua">{customerPanel.customer_name}</span>
+            {customerPanel
+              ? <>Showing stats for: <span className="text-hydro-deep-aqua">{customerPanel.customer_name}</span></>
+              : <>Showing stats for: <span className="text-hydro-deep-aqua">filtered results</span>
+                  {billsCustomerType && <span className="ml-1 text-blue-500 font-normal">({billsCustomerType})</span>}
+                  {(billsDateFrom || billsDateTo) && (
+                    <span className="ml-1 text-blue-500 font-normal">
+                      {billsDateFrom && billsDateTo ? ` · ${billsDateFrom} → ${billsDateTo}` : billsDateFrom ? ` · from ${billsDateFrom}` : ` · to ${billsDateTo}`}
+                    </span>
+                  )}
+                </>
+            }
           </p>
           <button
-            onClick={() => setCustomerPanel(null)}
+            onClick={() => {
+              if (customerPanel) setCustomerPanel(null);
+              else handleClearFilters();
+            }}
             className="text-xs text-blue-500 hover:text-blue-700 font-semibold"
           >
             Show all ×
@@ -439,7 +473,7 @@ function BillingDashboard() {
             </select>
             <select
               value={billsCustomerType}
-              onChange={e => { setBillsCustomerType(e.target.value); setBillsPage(1); fetchBills(1, billsSearch, billsStatus, billsDateFrom, billsDateTo, e.target.value); }}
+              onChange={e => { setBillsCustomerType(e.target.value); setBillsPage(1); fetchBills(1, billsSearch, billsStatus, billsDateFrom, billsDateTo, e.target.value); fetchStats(statsParams({ customer_type: e.target.value })); }}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
             >
               <option value="">All Types</option>

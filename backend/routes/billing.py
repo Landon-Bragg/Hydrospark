@@ -194,7 +194,7 @@ def admin_search_bills():
 @billing_bp.route('/stats', methods=['GET'])
 @jwt_required()
 def get_billing_stats():
-    """Billing/admin: aggregate summary stats"""
+    """Billing/admin: aggregate summary stats, optionally scoped to active filters."""
     try:
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
@@ -204,27 +204,52 @@ def get_billing_stats():
         from sqlalchemy import func
         from datetime import date
 
+        # Optional filter params (same as the bills table filter bar)
+        date_from     = request.args.get('date_from', '').strip()
+        date_to       = request.args.get('date_to', '').strip()
+        customer_type = request.args.get('customer_type', '').strip()
+        search        = request.args.get('search', '').strip()
+
+        # Build a reusable base query applying non-status filters
+        def base_query():
+            q = db.session.query(Bill)
+            if customer_type or search:
+                q = q.join(Customer, Bill.customer_id == Customer.id)
+            if customer_type:
+                q = q.filter(Customer.customer_type == customer_type)
+            if search:
+                q = q.filter(
+                    or_(
+                        Customer.customer_name.ilike(f'%{search}%'),
+                        Customer.location_id.ilike(f'%{search}%'),
+                    )
+                )
+            if date_from:
+                q = q.filter(Bill.billing_period_end >= date_from)
+            if date_to:
+                q = q.filter(Bill.billing_period_end <= date_to)
+            return q
+
         first_of_month = date.today().replace(day=1)
 
-        outstanding = db.session.query(
-            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
-        ).filter(Bill.status.in_(['pending', 'sent'])).one()
+        def agg(q):
+            row = db.session.query(
+                func.count(Bill.id),
+                func.coalesce(func.sum(Bill.total_amount), 0)
+            ).filter(Bill.id.in_(q.with_entities(Bill.id))).one()
+            return {'count': row[0], 'total': float(row[1])}
 
-        overdue = db.session.query(
-            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
-        ).filter(Bill.status == 'overdue').one()
-
-        paid_month = db.session.query(
-            func.count(Bill.id), func.coalesce(func.sum(Bill.total_amount), 0)
-        ).filter(
+        outstanding = agg(base_query().filter(Bill.status.in_(['pending', 'sent'])))
+        overdue     = agg(base_query().filter(Bill.status == 'overdue'))
+        paid_month  = agg(base_query().filter(
             Bill.status == 'paid',
-            Bill.paid_at >= first_of_month
-        ).one()
+            Bill.paid_at >= first_of_month,
+        ))
 
         return jsonify({
-            'outstanding': {'count': outstanding[0], 'total': float(outstanding[1])},
-            'overdue': {'count': overdue[0], 'total': float(overdue[1])},
-            'paid_this_month': {'count': paid_month[0], 'total': float(paid_month[1])},
+            'outstanding':    outstanding,
+            'overdue':        overdue,
+            'paid_this_month': paid_month,
         }), 200
 
     except Exception as e:
