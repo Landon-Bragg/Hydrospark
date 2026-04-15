@@ -259,27 +259,6 @@ function Pill({ active, onClick, children }) {
   );
 }
 
-// ── Type breakdown mini card ──────────────────────────────────────────────────
-function TypeCard({ icon, label, count, color, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: '10px', cursor: 'pointer',
-        textAlign: 'left', border: active ? `2px solid ${color}` : '2px solid transparent',
-        background: active ? `${color}15` : '#f9fafb',
-        transition: 'all .15s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-        <span style={{ fontSize: '16px' }}>{icon}</span>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</span>
-      </div>
-      <p style={{ fontSize: '22px', fontWeight: 800, color, margin: 0, lineHeight: 1 }}>{count.toLocaleString()}</p>
-    </button>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 function Alerts() {
   const { user } = useAuth();
@@ -298,7 +277,7 @@ function Alerts() {
   // Data
   const [alerts,    setAlerts]    = useState([]);
   const [total,     setTotal]     = useState(0);
-  const [counts,    setCounts]    = useState({ new: 0, acknowledged: 0, resolved: 0, type_spike: 0 });
+  const [counts,    setCounts]    = useState({ new: 0, acknowledged: 0, resolved: 0 });
   const [loading,   setLoading]   = useState(true);
   const [expanded,  setExpanded]  = useState(null); // alert id for expanded detail
 
@@ -335,7 +314,7 @@ function Alerts() {
       const res = await getAlerts(params);
       setAlerts(res.data.alerts  || []);
       setTotal(res.data.total    || 0);
-      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0, type_spike: 0 });
+      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0 });
     } catch (err) {
       console.error('Failed to load alerts', err);
     } finally {
@@ -477,11 +456,6 @@ function Alerts() {
       </div>
 
       {/* ── Type breakdown row ── */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <TypeCard icon="⚡" label="Spikes" count={counts.type_spike} color="#ef4444"
-          active={typeFilter === 'spike'}
-          onClick={() => handleTypeFilter(typeFilter === 'spike' ? '' : 'spike')} />
-      </div>
 
       {/* ── Filter + sort bar ── */}
       <div className="card mb-5 space-y-3">

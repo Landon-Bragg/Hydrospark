@@ -39,7 +39,7 @@ def get_alerts():
         search     = request.args.get('search', '').strip()      # customer name
         sort       = request.args.get('sort', 'date_desc')
 
-        query = AnomalyAlert.query
+        query = AnomalyAlert.query.filter(AnomalyAlert.alert_type == 'spike')
         if customer_id:
             query = query.filter(AnomalyAlert.customer_id == customer_id)
         if status:
@@ -75,17 +75,14 @@ def get_alerts():
         total  = query.count()
         alerts = query.offset((page - 1) * per_page).limit(per_page).all()
 
-        # Summary counts — always scoped to the customer (or global), ignoring current filters
-        base_q = AnomalyAlert.query
+        # Summary counts — spikes only, scoped to customer (or global), ignoring current filters
+        base_q = AnomalyAlert.query.filter(AnomalyAlert.alert_type == 'spike')
         if customer_id:
             base_q = base_q.filter(AnomalyAlert.customer_id == customer_id)
         counts = {
-            'new':             base_q.filter(AnomalyAlert.status == 'new').count(),
-            'acknowledged':    base_q.filter(AnomalyAlert.status == 'acknowledged').count(),
-            'resolved':        base_q.filter(AnomalyAlert.status == 'resolved').count(),
-            'type_spike':      base_q.filter(AnomalyAlert.alert_type == 'spike').count(),
-            'type_leak':       base_q.filter(AnomalyAlert.alert_type == 'leak').count(),
-            'type_unusual':    base_q.filter(AnomalyAlert.alert_type == 'unusual_pattern').count(),
+            'new':          base_q.filter(AnomalyAlert.status == 'new').count(),
+            'acknowledged': base_q.filter(AnomalyAlert.status == 'acknowledged').count(),
+            'resolved':     base_q.filter(AnomalyAlert.status == 'resolved').count(),
         }
 
         return jsonify({

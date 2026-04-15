@@ -377,7 +377,7 @@ class MLService:
 
                     alert_type = 'spike'
 
-                    if deviation > 30:
+                    if deviation > 50:
                         alert = AnomalyAlert(
                             customer_id=customer_id,
                             alert_date=date,
