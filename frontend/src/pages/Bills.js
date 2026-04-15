@@ -36,6 +36,56 @@ const STATUS = {
   refunded: { bg: '#f3e8ff', text: '#7e22ce', border: '#d8b4fe', label: 'REFUNDED', row: 'bg-purple-100 text-purple-700', pdfRgb: [126, 34, 206] },
 };
 
+// ── Logo: render the water-drop mark to a canvas → PNG data URL ──
+function getLogoDataUrl() {
+  const SIZE = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  const ctx = canvas.getContext('2d');
+  const s = SIZE / 24; // scale factor (SVG viewBox is 24×24)
+
+  // Navy rounded-rect background
+  const r = SIZE * 0.16;
+  ctx.fillStyle = '#0A4C78';
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(SIZE - r, 0);
+  ctx.quadraticCurveTo(SIZE, 0, SIZE, r);
+  ctx.lineTo(SIZE, SIZE - r);
+  ctx.quadraticCurveTo(SIZE, SIZE, SIZE - r, SIZE);
+  ctx.lineTo(r, SIZE);
+  ctx.quadraticCurveTo(0, SIZE, 0, SIZE - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Water-drop fill (white) — mirrors the SVG path in Layout.js
+  // M12 2 C12 2 4.5 10.8 4.5 15.5 C4.5 19.64 7.86 23 12 23
+  //         C16.14 23 19.5 19.64 19.5 15.5 C19.5 10.8 12 2 12 2 Z
+  ctx.fillStyle = 'rgba(255,255,255,0.93)';
+  ctx.beginPath();
+  ctx.moveTo(12*s, 2*s);
+  ctx.bezierCurveTo(12*s, 2*s,     4.5*s, 10.8*s,  4.5*s,  15.5*s);
+  ctx.bezierCurveTo(4.5*s, 19.64*s, 7.86*s, 23*s,   12*s,   23*s);
+  ctx.bezierCurveTo(16.14*s, 23*s,  19.5*s, 19.64*s, 19.5*s, 15.5*s);
+  ctx.bezierCurveTo(19.5*s, 10.8*s, 12*s,   2*s,    12*s,   2*s);
+  ctx.closePath();
+  ctx.fill();
+
+  // Highlight stroke (spark-blue) — inner shine line
+  ctx.strokeStyle = 'rgba(30,167,214,0.70)';
+  ctx.lineWidth   = 1.6 * s;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(9*s, 17*s);
+  ctx.quadraticCurveTo(9*s, 14.5*s, 11.5*s, 13*s);
+  ctx.stroke();
+
+  return canvas.toDataURL('image/png');
+}
+
 // ── PDF header helper (shared) ─────────────────────────────────
 function pdfHeader(doc, subtitle) {
   const pw = doc.internal.pageSize.getWidth();
@@ -48,13 +98,19 @@ function pdfHeader(doc, subtitle) {
   doc.setFillColor(...SPARK);
   doc.rect(0, 45, pw, 1.5, 'F');
 
-  // Logo badge — white rounded square with 'HS' monogram
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(12, 10, 22, 22, 3, 3, 'F');
-  doc.setTextColor(...DEEP);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('HS', 23, 23.5, { align: 'center' });
+  // HydroSpark logo image (water-drop mark on navy background)
+  try {
+    const logoData = getLogoDataUrl();
+    doc.addImage(logoData, 'PNG', 12, 10, 22, 22);
+  } catch (e) {
+    // Fallback: plain "HS" text badge if canvas is unavailable
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(12, 10, 22, 22, 3, 3, 'F');
+    doc.setTextColor(...DEEP);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('HS', 23, 23.5, { align: 'center' });
+  }
 
   // Company name
   doc.setTextColor(255, 255, 255);
