@@ -43,6 +43,10 @@ const ADMIN_LINKS = [
   { to: '/admin',     label: 'Admin', accent: true },
 ];
 
+const FIELD_LINKS = [
+  { to: '/work-orders', label: 'Work Orders' },
+];
+
 function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -65,9 +69,10 @@ function Layout() {
   };
 
   let links;
-  if (user?.role === 'billing') links = BILLING_LINKS;
-  else if (user?.role === 'admin') links = ADMIN_LINKS;
-  else links = CUSTOMER_LINKS;
+  if (user?.role === 'billing')     links = BILLING_LINKS;
+  else if (user?.role === 'admin')  links = ADMIN_LINKS;
+  else if (user?.role === 'field')  links = FIELD_LINKS;
+  else                              links = CUSTOMER_LINKS;
 
   return (
     <div className="min-h-screen">

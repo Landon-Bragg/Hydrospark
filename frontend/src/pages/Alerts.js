@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { getAlerts, acknowledgeAlert, dispatchAlert, applyBillAdjustment, detectAnomalies } from '../services/api';
+import { getAlerts, acknowledgeAlert, resolveAlert, dispatchAlert, applyBillAdjustment, detectAnomalies } from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_RATE = 5.72;
@@ -358,6 +358,15 @@ function Alerts() {
     }
   };
 
+  const handleResolve = async (alertId) => {
+    try {
+      await resolveAlert(alertId);
+      loadAlerts();
+    } catch (err) {
+      console.error('Failed to resolve alert', err);
+    }
+  };
+
   const handleRunDetection = async () => {
     setDetecting(true);
     setDetectResult(null);
@@ -635,12 +644,19 @@ function Alerts() {
                           Acknowledge
                         </button>
                       )}
-                      {alert.status !== 'new' && (
-                        <span style={{ padding: '3px 10px', background: alert.status === 'resolved' ? '#d1fae5' : '#fef9c3',
-                                       color: alert.status === 'resolved' ? '#065f46' : '#713f12',
-                                       border: `1px solid ${alert.status === 'resolved' ? '#a7f3d0' : '#fde68a'}`,
-                                       borderRadius: '20px', fontSize: '11px', fontWeight: 700 }}>
-                          {alert.status.toUpperCase()}
+                      {alert.status === 'acknowledged' && (
+                        <button onClick={() => handleResolve(alert.id)}
+                          style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
+                                   border: '1px solid #a7f3d0', color: '#065f46',
+                                   borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer' }}>
+                          Mark Resolved
+                        </button>
+                      )}
+                      {alert.status === 'resolved' && (
+                        <span style={{ padding: '3px 10px', background: '#d1fae5', color: '#065f46',
+                                       border: '1px solid #a7f3d0', borderRadius: '20px',
+                                       fontSize: '11px', fontWeight: 700 }}>
+                          RESOLVED
                         </span>
                       )}
 

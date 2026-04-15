@@ -127,6 +127,124 @@ def acknowledge_alert(alert_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@alerts_bp.route('/work-orders', methods=['GET'])
+@jwt_required()
+def get_work_orders():
+    """Return dispatched alerts as work orders (open + recently completed)."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing', 'field']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        status_filter = request.args.get('status', 'open')  # open | completed | all
+
+        query = (AnomalyAlert.query
+                 .filter(AnomalyAlert.action_taken == 'dispatch')
+                 .order_by(AnomalyAlert.dispatched_at.desc()))
+
+        if status_filter == 'open':
+            query = query.filter(AnomalyAlert.status == 'acknowledged')
+        elif status_filter == 'completed':
+            query = query.filter(AnomalyAlert.status == 'resolved')
+
+        work_orders = query.all()
+        return jsonify({'work_orders': [_alert_dict(a) for a in work_orders]}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@alerts_bp.route('/<int:alert_id>/complete', methods=['POST'])
+@jwt_required()
+def complete_work_order(alert_id):
+    """Field tech marks a dispatched work order as completed."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing', 'field']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
+        if not alert:
+            return jsonify({'error': 'Work order not found'}), 404
+        if alert.status == 'resolved':
+            return jsonify({'error': 'Work order already completed'}), 409
+        if alert.action_taken != 'dispatch':
+            return jsonify({'error': 'This alert was not dispatched as a work order'}), 400
+
+        data = request.get_json() or {}
+        completion_notes = (data.get('completion_notes') or '').strip()
+
+        alert.status = 'resolved'
+        alert.resolved_at = datetime.utcnow()
+        alert.completion_notes = completion_notes or None
+
+        # Notify billing/admin team
+        admin_users = User.query.filter(User.role.in_(['admin', 'billing'])).all()
+        customer = alert.customer
+        cust_name = customer.customer_name if customer else 'Unknown'
+        for admin in admin_users:
+            notif = Notification(
+                user_id=admin.id,
+                created_by=user_id,
+                title='Work Order Completed',
+                message=(
+                    f'Field technician completed work order for {cust_name} '
+                    f'(alert {alert_id}, {alert.alert_date}).'
+                    + (f' Notes: {completion_notes}' if completion_notes else '')
+                ),
+            )
+            db.session.add(notif)
+
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action='complete_work_order',
+            entity_type='anomaly_alert',
+            entity_id=alert_id,
+            details=completion_notes or 'No notes provided',
+        ))
+        db.session.commit()
+
+        return jsonify({'message': 'Work order completed', 'alert': _alert_dict(alert)}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@alerts_bp.route('/<int:alert_id>/resolve', methods=['POST'])
+@jwt_required()
+def resolve_alert(alert_id):
+    """Mark an alert as resolved."""
+    try:
+        user_id = int(get_jwt_identity())
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
+        if not alert:
+            return jsonify({'error': 'Alert not found'}), 404
+
+        if alert.status == 'resolved':
+            return jsonify({'error': 'Alert is already resolved'}), 409
+
+        alert.status = 'resolved'
+        alert.resolved_at = datetime.utcnow()
+
+        db.session.add(AuditLog(
+            user_id=user_id,
+            action='resolve_alert',
+            entity_type='anomaly_alert',
+            entity_id=alert_id,
+            details='Manually resolved',
+        ))
+        db.session.commit()
+
+        return jsonify({'message': 'Alert resolved', 'alert': _alert_dict(alert)}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 def _alert_dict(alert):
     """Serialize alert with customer info."""
     d = alert.to_dict()

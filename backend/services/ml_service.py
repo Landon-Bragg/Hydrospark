@@ -377,7 +377,9 @@ class MLService:
 
                     alert_type = 'spike'
 
-                    if deviation > 60:
+                    ccf_diff = usage_value - mean_usage
+                    qualifies = deviation > 60 and (ccf_diff >= 1.0 or deviation > 100)
+                    if qualifies:
                         alert = AnomalyAlert(
                             customer_id=customer_id,
                             alert_date=date,

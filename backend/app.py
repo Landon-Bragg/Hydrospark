@@ -101,6 +101,8 @@ def run_migrations():
         ("anomaly_alerts", "notes",                   "TEXT NULL"),
         ("anomaly_alerts", "bill_adjustment_amount",  "DECIMAL(10,2) NULL"),
         ("bills",          "refunded_at",             "DATETIME NULL"),
+        ("anomaly_alerts", "resolved_at",             "DATETIME NULL"),
+        ("anomaly_alerts", "completion_notes",        "TEXT NULL"),
     ]
     try:
         with db.engine.connect() as conn:
@@ -113,6 +115,12 @@ def run_migrations():
                 ), {"tbl": table_name, "col": col_name}).scalar()
                 if not exists:
                     conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}"))
+
+            # Expand users.role enum to include 'field'
+            conn.execute(text(
+                "ALTER TABLE users MODIFY COLUMN role "
+                "ENUM('admin','billing','customer','field') DEFAULT 'customer'"
+            ))
             conn.commit()
         print("Migrations complete.")
     except Exception as e:
@@ -139,6 +147,21 @@ def seed_default_users():
         db.session.add(billing_user)
         db.session.commit()
         print('Created default billing user: billing@hydrospark.com / billing123')
+
+    if not User.query.filter_by(email='field@hydrospark.com').first():
+        pw_hash = bcrypt.hashpw(b'field123', bcrypt.gensalt(12)).decode()
+        field_user = User(
+            email='field@hydrospark.com',
+            password_hash=pw_hash,
+            role='field',
+            first_name='Field',
+            last_name='Technician',
+            is_active=True,
+            is_approved=True,
+        )
+        db.session.add(field_user)
+        db.session.commit()
+        print('Created default field user: field@hydrospark.com / field123')
 
 with app.app_context():
     seed_default_users()
@@ -312,6 +335,11 @@ def purge_low_usage_alerts():
             db.or_(
                 AnomalyAlert.alert_type.in_(['unusual_pattern', 'leak']),
                 AnomalyAlert.deviation_percentage < 60,
+                # Small CCF spikes (<1 CCF) require 100% deviation
+                db.and_(
+                    (AnomalyAlert.usage_ccf - AnomalyAlert.expected_usage_ccf) < 1.0,
+                    AnomalyAlert.deviation_percentage <= 100,
+                ),
             )
         ).delete(synchronize_session=False)
         db.session.commit()

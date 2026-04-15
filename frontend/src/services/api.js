@@ -54,8 +54,11 @@ export const refundBill = (id) => api.post(`/billing/bills/${id}/refund`);
 // Alerts
 export const getAlerts = (params) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id) => api.post(`/alerts/${id}/acknowledge`);
+export const resolveAlert = (id) => api.post(`/alerts/${id}/resolve`);
 export const dispatchAlert = (id, data) => api.post(`/alerts/${id}/dispatch`, data);
 export const applyBillAdjustment = (id, data) => api.post(`/alerts/${id}/adjust-bill`, data);
+export const getWorkOrders = (params) => api.get('/alerts/work-orders', { params });
+export const completeWorkOrder = (id, data) => api.post(`/alerts/${id}/complete`, data);
 
 // Admin
 export const getUsers = () => api.get('/admin/users');
