@@ -14,36 +14,85 @@ ml_service = MLService()
 @alerts_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_alerts():
-    """Get anomaly alerts"""
+    """Get anomaly alerts with server-side pagination and filtering."""
     try:
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
-        
+
         if user.role == 'customer':
             if not user.customer:
                 return jsonify({'error': 'Customer profile not found'}), 404
             customer_id = user.customer.id
         else:
             customer_id = request.args.get('customer_id', type=int)
-        
+
+        # Pagination
+        page     = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+
+        # Filters
+        status     = request.args.get('status', '').strip()
+        alert_type = request.args.get('alert_type', '').strip()
+        risk_level = request.args.get('risk_level', '').strip()  # high / medium / low
+        date_from  = request.args.get('date_from', '').strip()
+        date_to    = request.args.get('date_to', '').strip()
+        search     = request.args.get('search', '').strip()      # customer name
+        sort       = request.args.get('sort', 'date_desc')
+
         query = AnomalyAlert.query
         if customer_id:
-            query = query.filter_by(customer_id=customer_id)
-
-        status = request.args.get('status')
+            query = query.filter(AnomalyAlert.customer_id == customer_id)
         if status:
-            query = query.filter_by(status=status)
+            query = query.filter(AnomalyAlert.status == status)
+        if alert_type:
+            query = query.filter(AnomalyAlert.alert_type == alert_type)
+        if risk_level == 'high':
+            query = query.filter(AnomalyAlert.risk_score >= 75)
+        elif risk_level == 'medium':
+            query = query.filter(AnomalyAlert.risk_score >= 50, AnomalyAlert.risk_score < 75)
+        elif risk_level == 'low':
+            query = query.filter(AnomalyAlert.risk_score < 50)
+        if date_from:
+            query = query.filter(AnomalyAlert.alert_date >= date_from)
+        if date_to:
+            query = query.filter(AnomalyAlert.alert_date <= date_to)
+        if search:
+            query = (query
+                .join(Customer, AnomalyAlert.customer_id == Customer.id)
+                .filter(Customer.customer_name.ilike(f'%{search}%'))
+            )
 
-        limit = request.args.get('limit', type=int)
-        alerts = query.order_by(AnomalyAlert.alert_date.desc())
-        if limit:
-            alerts = alerts.limit(limit)
-        alerts = alerts.all()
+        # Sort
+        if sort == 'date_asc':
+            query = query.order_by(AnomalyAlert.alert_date.asc())
+        elif sort == 'risk_desc':
+            query = query.order_by(AnomalyAlert.risk_score.desc())
+        elif sort == 'risk_asc':
+            query = query.order_by(AnomalyAlert.risk_score.asc())
+        else:
+            query = query.order_by(AnomalyAlert.alert_date.desc())
+
+        total  = query.count()
+        alerts = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        # Summary counts — always scoped to the customer (or global), ignoring current filters
+        base_q = AnomalyAlert.query
+        if customer_id:
+            base_q = base_q.filter(AnomalyAlert.customer_id == customer_id)
+        counts = {
+            'new':          base_q.filter(AnomalyAlert.status == 'new').count(),
+            'acknowledged': base_q.filter(AnomalyAlert.status == 'acknowledged').count(),
+            'resolved':     base_q.filter(AnomalyAlert.status == 'resolved').count(),
+        }
 
         return jsonify({
-            'alerts': [_alert_dict(a) for a in alerts]
+            'alerts':   [_alert_dict(a) for a in alerts],
+            'total':    total,
+            'page':     page,
+            'per_page': per_page,
+            'counts':   counts,
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

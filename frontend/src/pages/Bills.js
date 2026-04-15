@@ -114,7 +114,7 @@ const WaterDrop = ({ size = 34 }) => (
 );
 
 // ── Inline invoice component ───────────────────────────────────
-function BillInvoice({ bill, customer }) {
+export function BillInvoice({ bill, customer }) {
   const usage  = parseFloat(bill.total_usage_ccf);
   const cost   = parseFloat(bill.total_amount);
   const rate   = usage > 0 ? (cost / usage).toFixed(2) : '5.72';

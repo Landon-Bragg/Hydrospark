@@ -181,6 +181,8 @@ def admin_search_bills():
             d['location_id'] = customer.location_id
             d['water_status'] = customer.water_status or 'active'
             d['user_id'] = u.id
+            d['mailing_address'] = customer.mailing_address
+            d['zip_code'] = customer.zip_code
             bills.append(d)
 
         return jsonify({'bills': bills, 'total': total, 'page': page, 'per_page': per_page}), 200

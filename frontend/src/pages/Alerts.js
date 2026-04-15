@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { getAlerts, acknowledgeAlert, dispatchAlert, applyBillAdjustment } from '../services/api';
@@ -244,40 +244,56 @@ function Pill({ active, onClick, children }) {
   );
 }
 
+const PER_PAGE = 25;
+
 // ── Main component ────────────────────────────────────────────────────────────
 function Alerts() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'billing';
 
-  // Server-side status filter (drives the API call)
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [alerts, setAlerts] = useState([]);
+  // Filters — all server-side
+  const [statusFilter,    setStatusFilter]    = useState('');
+  const [typeFilter,      setTypeFilter]      = useState('');
+  const [riskFilter,      setRiskFilter]      = useState('');
+  const [dateFrom,        setDateFrom]        = useState('');
+  const [dateTo,          setDateTo]          = useState('');
+  const [customerSearch,  setCustomerSearch]  = useState('');
+  const [sortBy,          setSortBy]          = useState('date_desc');
+  const [page,            setPage]            = useState(1);
+
+  // Data
+  const [alerts,  setAlerts]  = useState([]);
+  const [total,   setTotal]   = useState(0);
+  const [counts,  setCounts]  = useState({ new: 0, acknowledged: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
-
-  // Client-side filters
-  const [typeFilter, setTypeFilter]       = useState('');    // '' | 'spike' | 'leak' | 'unusual_pattern'
-  const [riskFilter, setRiskFilter]       = useState('');    // '' | 'high' | 'medium' | 'low'
-  const [dateFrom, setDateFrom]           = useState('');
-  const [dateTo, setDateTo]               = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');  // admin only
-
-  // Sort
-  const [sortBy, setSortBy]     = useState('date_desc');     // date_desc | date_asc | risk_desc | risk_asc
 
   // Action modals
   const [dispatchTarget, setDispatchTarget] = useState(null);
-  const [creditTarget, setCreditTarget]     = useState(null);
+  const [creditTarget,   setCreditTarget]   = useState(null);
 
-  useEffect(() => {
-    loadAlerts();
-  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadAlerts = async () => {
+  // Core fetch — accepts explicit overrides so callers can pass new values
+  // before React state has flushed
+  const loadAlerts = async (overrides = {}) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const params = statusFilter !== 'all' ? { status: statusFilter } : {};
-      const response = await getAlerts(params);
-      setAlerts(response.data.alerts || []);
+      const p = overrides.page         ?? page;
+      const params = { page: p, per_page: PER_PAGE, sort: overrides.sort ?? sortBy };
+      const st = overrides.status      !== undefined ? overrides.status      : statusFilter;
+      const ty = overrides.alert_type  !== undefined ? overrides.alert_type  : typeFilter;
+      const rl = overrides.risk_level  !== undefined ? overrides.risk_level  : riskFilter;
+      const df = overrides.date_from   !== undefined ? overrides.date_from   : dateFrom;
+      const dt = overrides.date_to     !== undefined ? overrides.date_to     : dateTo;
+      const sr = overrides.search      !== undefined ? overrides.search      : customerSearch;
+      if (st) params.status     = st;
+      if (ty) params.alert_type = ty;
+      if (rl) params.risk_level = rl;
+      if (df) params.date_from  = df;
+      if (dt) params.date_to    = dt;
+      if (sr) params.search     = sr;
+      const res = await getAlerts(params);
+      setAlerts(res.data.alerts  || []);
+      setTotal(res.data.total    || 0);
+      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0 });
     } catch (err) {
       console.error('Failed to load alerts', err);
     } finally {
@@ -285,80 +301,76 @@ function Alerts() {
     }
   };
 
-  const handleAcknowledge = async (alertId) => {
-    try {
-      await acknowledgeAlert(alertId);
-      await loadAlerts();
-    } catch (err) {
-      console.error('Failed to acknowledge alert', err);
-    }
+  // Initial load
+  useEffect(() => { loadAlerts(); }, []); // eslint-disable-line
+
+  // Debounce customer search
+  const searchTimer = useRef(null);
+  const handleSearchChange = (val) => {
+    setCustomerSearch(val);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      loadAlerts({ search: val, page: 1 });
+    }, 400);
+  };
+
+  const handleStatusFilter = (val) => {
+    setStatusFilter(val); setPage(1);
+    loadAlerts({ status: val, page: 1 });
+  };
+  const handleTypeFilter = (val) => {
+    setTypeFilter(val); setPage(1);
+    loadAlerts({ alert_type: val, page: 1 });
+  };
+  const handleRiskFilter = (val) => {
+    setRiskFilter(val); setPage(1);
+    loadAlerts({ risk_level: val, page: 1 });
+  };
+  const handleDateFrom = (val) => {
+    setDateFrom(val); setPage(1);
+    loadAlerts({ date_from: val, page: 1 });
+  };
+  const handleDateTo = (val) => {
+    setDateTo(val); setPage(1);
+    loadAlerts({ date_to: val, page: 1 });
+  };
+  const handleSort = (val) => {
+    setSortBy(val); setPage(1);
+    loadAlerts({ sort: val, page: 1 });
+  };
+  const handlePage = (p) => {
+    setPage(p);
+    loadAlerts({ page: p });
   };
 
   const clearFilters = () => {
-    setTypeFilter('');
-    setRiskFilter('');
-    setDateFrom('');
-    setDateTo('');
-    setCustomerSearch('');
+    setTypeFilter(''); setRiskFilter(''); setDateFrom(''); setDateTo(''); setCustomerSearch('');
+    setPage(1);
+    loadAlerts({ alert_type: '', risk_level: '', date_from: '', date_to: '', search: '', page: 1 });
+  };
+
+  const handleAcknowledge = async (alertId) => {
+    try {
+      await acknowledgeAlert(alertId);
+      loadAlerts();
+    } catch (err) { console.error('Failed to acknowledge alert', err); }
   };
 
   const hasActiveFilters = typeFilter || riskFilter || dateFrom || dateTo || customerSearch;
+  const totalPages = Math.ceil(total / PER_PAGE);
 
-  // ── Client-side filter + sort ──────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let result = [...alerts];
-
-    if (typeFilter) {
-      result = result.filter(a => a.alert_type === typeFilter);
-    }
-
-    if (riskFilter === 'high')   result = result.filter(a => parseFloat(a.risk_score) >= 75);
-    if (riskFilter === 'medium') result = result.filter(a => parseFloat(a.risk_score) >= 50 && parseFloat(a.risk_score) < 75);
-    if (riskFilter === 'low')    result = result.filter(a => parseFloat(a.risk_score) < 50);
-
-    if (dateFrom) result = result.filter(a => a.alert_date >= dateFrom);
-    if (dateTo)   result = result.filter(a => a.alert_date <= dateTo);
-
-    if (customerSearch) {
-      const q = customerSearch.toLowerCase();
-      result = result.filter(a =>
-        (a.customer_name || '').toLowerCase().includes(q) ||
-        (a.customer_email || '').toLowerCase().includes(q)
-      );
-    }
-
-    result.sort((a, b) => {
-      if (sortBy === 'date_desc') return (b.alert_date || '').localeCompare(a.alert_date || '');
-      if (sortBy === 'date_asc')  return (a.alert_date || '').localeCompare(b.alert_date || '');
-      if (sortBy === 'risk_desc') return parseFloat(b.risk_score) - parseFloat(a.risk_score);
-      if (sortBy === 'risk_asc')  return parseFloat(a.risk_score) - parseFloat(b.risk_score);
-      return 0;
-    });
-
-    return result;
-  }, [alerts, typeFilter, riskFilter, dateFrom, dateTo, customerSearch, sortBy]);
-
-  const getAlertColor = (type) => {
-    const colors = {
-      'spike': 'border-red-500 bg-red-50',
-      'leak': 'border-orange-500 bg-orange-50',
-      'unusual_pattern': 'border-yellow-500 bg-yellow-50'
-    };
-    return colors[type] || 'border-gray-500 bg-gray-50';
-  };
+  const getAlertColor = (type) => ({
+    spike:           'border-red-500 bg-red-50',
+    leak:            'border-orange-500 bg-orange-50',
+    unusual_pattern: 'border-yellow-500 bg-yellow-50',
+  }[type] || 'border-gray-500 bg-gray-50');
 
   const getRiskColor = (score) => {
     if (score >= 75) return 'text-red-600';
     if (score >= 50) return 'text-orange-600';
     return 'text-yellow-600';
   };
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <div className="hydro-spinner" />
-      <p className="text-sm text-gray-400 font-medium">Loading alerts…</p>
-    </div>
-  );
 
   return (
     <div>
@@ -374,15 +386,15 @@ function Alerts() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white">
           <p className="text-sm mb-1">New Alerts</p>
-          <p className="text-3xl font-bold">{alerts.filter(a => a.status === 'new').length}</p>
+          <p className="text-3xl font-bold">{counts.new.toLocaleString()}</p>
         </div>
         <div className="card bg-gradient-to-br from-yellow-500 to-yellow-600 text-white">
           <p className="text-sm mb-1">Acknowledged</p>
-          <p className="text-3xl font-bold">{alerts.filter(a => a.status === 'acknowledged').length}</p>
+          <p className="text-3xl font-bold">{counts.acknowledged.toLocaleString()}</p>
         </div>
         <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
           <p className="text-sm mb-1">Resolved</p>
-          <p className="text-3xl font-bold">{alerts.filter(a => a.status === 'resolved').length}</p>
+          <p className="text-3xl font-bold">{counts.resolved.toLocaleString()}</p>
         </div>
       </div>
 
@@ -390,61 +402,51 @@ function Alerts() {
       <div className="card mb-5 space-y-3">
         {/* Row 1: status + type + risk */}
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Status */}
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Status</span>
-          {[['all','All'],['new','New'],['acknowledged','Acknowledged'],['resolved','Resolved']].map(([val, label]) => (
-            <Pill key={val} active={statusFilter === val} onClick={() => setStatusFilter(val)}>{label}</Pill>
+          {[['','All'],['new','New'],['acknowledged','Acknowledged'],['resolved','Resolved']].map(([val, label]) => (
+            <Pill key={val} active={statusFilter === val} onClick={() => handleStatusFilter(val)}>{label}</Pill>
           ))}
 
           <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
 
-          {/* Type */}
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Type</span>
           {[['','All'],['spike','Spike'],['leak','Leak'],['unusual_pattern','Unusual']].map(([val, label]) => (
-            <Pill key={val} active={typeFilter === val} onClick={() => setTypeFilter(val)}>{label}</Pill>
+            <Pill key={val} active={typeFilter === val} onClick={() => handleTypeFilter(val)}>{label}</Pill>
           ))}
 
           <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
 
-          {/* Risk */}
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Risk</span>
           {[['','All'],['high','High ≥75'],['medium','Med 50–74'],['low','Low <50']].map(([val, label]) => (
-            <Pill key={val} active={riskFilter === val} onClick={() => setRiskFilter(val)}>{label}</Pill>
+            <Pill key={val} active={riskFilter === val} onClick={() => handleRiskFilter(val)}>{label}</Pill>
           ))}
         </div>
 
-        {/* Row 2: date range + customer search (admin) + sort + clear */}
+        {/* Row 2: date + search + sort + clear */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</span>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs"
-            title="From date"
-          />
+          <input type="date" value={dateFrom} onChange={e => handleDateFrom(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs" title="From date" />
           <span className="text-xs text-gray-400">→</span>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs"
-            title="To date"
-          />
+          <input type="date" value={dateTo} onChange={e => handleDateTo(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs" title="To date" />
 
           {isAdmin && (
-            <input
-              type="text"
-              value={customerSearch}
-              onChange={e => setCustomerSearch(e.target.value)}
-              placeholder="Customer name / email…"
-              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs w-48"
+            <input type="text" value={customerSearch}
+              onChange={e => handleSearchChange(e.target.value)}
+              placeholder="Customer name…"
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs w-44"
             />
           )}
 
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sort</span>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs bg-white"
-            >
-              <option value="date_desc">Date — Newest first</option>
-              <option value="date_asc">Date — Oldest first</option>
-              <option value="risk_desc">Risk — Highest first</option>
-              <option value="risk_asc">Risk — Lowest first</option>
+            <select value={sortBy} onChange={e => handleSort(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs bg-white">
+              <option value="date_desc">Newest first</option>
+              <option value="date_asc">Oldest first</option>
+              <option value="risk_desc">Highest risk</option>
+              <option value="risk_asc">Lowest risk</option>
             </select>
 
             {hasActiveFilters && (
@@ -458,124 +460,179 @@ function Alerts() {
 
         {/* Result count */}
         <p className="text-xs text-gray-400">
-          Showing {filtered.length} of {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
-          {hasActiveFilters && <span className="ml-1 text-hydro-spark-blue font-medium">(filtered)</span>}
+          {loading ? 'Loading…' : (
+            <>
+              {total.toLocaleString()} alert{total !== 1 ? 's' : ''}
+              {hasActiveFilters && <span className="ml-1 text-hydro-spark-blue font-medium">(filtered)</span>}
+              {totalPages > 1 && <span className="ml-1">· Page {page} of {totalPages}</span>}
+            </>
+          )}
         </p>
       </div>
 
       {/* ── Alert list ── */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="hydro-spinner" />
+          <p className="text-sm text-gray-400 font-medium">Loading alerts…</p>
+        </div>
+      ) : alerts.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-xl text-gray-600">No alerts match your filters</p>
           <p className="text-sm text-gray-500 mt-2">Try adjusting the status, type, risk, or date range</p>
           {hasActiveFilters && (
-            <button onClick={clearFilters}
-              className="mt-4 text-sm text-hydro-spark-blue hover:underline font-medium">
+            <button onClick={clearFilters} className="mt-4 text-sm text-hydro-spark-blue hover:underline font-medium">
               Clear all filters
             </button>
           )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {filtered.map((alert) => (
-            <div key={alert.id} className={`card border-l-4 ${getAlertColor(alert.alert_type)}`}>
-              <div className="flex justify-between items-start gap-4">
-                {/* Left: alert details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-lg font-bold text-gray-800 capitalize">
-                      {alert.alert_type.replace('_', ' ')}
-                    </h3>
-                    <span className={`text-2xl font-bold ${getRiskColor(alert.risk_score)}`}>
-                      Risk: {parseFloat(alert.risk_score).toFixed(0)}%
-                    </span>
+        <>
+          <div className="space-y-4">
+            {alerts.map((alert) => (
+              <div key={alert.id} className={`card border-l-4 ${getAlertColor(alert.alert_type)}`}>
+                <div className="flex justify-between items-start gap-4">
+                  {/* Left: alert details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="text-lg font-bold text-gray-800 capitalize">
+                        {alert.alert_type.replace('_', ' ')}
+                      </h3>
+                      <span className={`text-2xl font-bold ${getRiskColor(alert.risk_score)}`}>
+                        Risk: {parseFloat(alert.risk_score).toFixed(0)}%
+                      </span>
+                    </div>
+
+                    {(alert.customer_name || alert.customer_email) && (
+                      <div className="text-sm text-gray-600 mb-2">
+                        <span className="font-medium">{alert.customer_name}</span>
+                        {alert.customer_email && (
+                          <span className="ml-2 text-gray-400">{alert.customer_email}</span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Date</p>
+                        <p className="font-semibold">{alert.alert_date}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Usage</p>
+                        <p className="font-semibold">{parseFloat(alert.usage_ccf).toFixed(2)} CCF</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Expected</p>
+                        <p className="font-semibold">{parseFloat(alert.expected_usage_ccf).toFixed(2)} CCF</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Deviation</p>
+                        {(() => {
+                          const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
+                          const pct  = parseFloat(alert.deviation_percentage);
+                          const sign = diff >= 0 ? '+' : '';
+                          return (
+                            <>
+                              <p className="font-bold text-red-600">{sign}{diff.toFixed(2)} CCF</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{sign}{pct.toFixed(1)}% vs expected</p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {alert.notes && (
+                      <p className="mt-3 text-xs text-gray-500 italic bg-white border border-gray-100 rounded px-3 py-2">
+                        Note: {alert.notes}
+                      </p>
+                    )}
                   </div>
 
-                  {(alert.customer_name || alert.customer_email) && (
-                    <div className="text-sm text-gray-600 mb-2">
-                      <span className="font-medium">{alert.customer_name}</span>
-                      {alert.customer_email && (
-                        <span className="ml-2 text-gray-400">{alert.customer_email}</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Date</p>
-                      <p className="font-semibold">{alert.alert_date}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Usage</p>
-                      <p className="font-semibold">{parseFloat(alert.usage_ccf).toFixed(2)} CCF</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Expected</p>
-                      <p className="font-semibold">{parseFloat(alert.expected_usage_ccf).toFixed(2)} CCF</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Deviation</p>
-                      {(() => {
-                        const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
-                        const pct  = parseFloat(alert.deviation_percentage);
-                        const sign = diff >= 0 ? '+' : '';
-                        return (
-                          <>
-                            <p className="font-bold text-red-600">{sign}{diff.toFixed(2)} CCF</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{sign}{pct.toFixed(1)}% vs expected</p>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {alert.notes && (
-                    <p className="mt-3 text-xs text-gray-500 italic bg-white border border-gray-100 rounded px-3 py-2">
-                      Note: {alert.notes}
-                    </p>
-                  )}
-                </div>
-
-                {/* Right: status, badges, action buttons */}
-                <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  {alert.status === 'new' && (
-                    <button onClick={() => handleAcknowledge(alert.id)} className="btn-secondary">
-                      Acknowledge
-                    </button>
-                  )}
-                  {alert.status !== 'new' && (
-                    <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm font-semibold">
-                      {alert.status.toUpperCase()}
-                    </span>
-                  )}
-
-                  <ActionBadge alert={alert} />
-
-                  {isAdmin && alert.status !== 'resolved' && (
-                    <div className="flex gap-1.5 mt-1">
-                      {alert.action_taken !== 'dispatch' && (
-                        <button onClick={() => setDispatchTarget(alert)}
-                          style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
-                                   border: '1px solid #93c5fd', color: '#1d4ed8',
-                                   borderRadius: '6px', background: '#eff6ff', cursor: 'pointer',
-                                   whiteSpace: 'nowrap' }}>
-                          🔧 Dispatch
-                        </button>
-                      )}
-                      <button onClick={() => setCreditTarget(alert)}
-                        style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
-                                 border: '1px solid #6ee7b7', color: '#065f46',
-                                 borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer',
-                                 whiteSpace: 'nowrap' }}>
-                        💳 Bill Credit
+                  {/* Right: status, badges, actions */}
+                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                    {alert.status === 'new' && (
+                      <button onClick={() => handleAcknowledge(alert.id)} className="btn-secondary">
+                        Acknowledge
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {alert.status !== 'new' && (
+                      <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm font-semibold">
+                        {alert.status.toUpperCase()}
+                      </span>
+                    )}
+
+                    <ActionBadge alert={alert} />
+
+                    {isAdmin && alert.status !== 'resolved' && (
+                      <div className="flex gap-1.5 mt-1">
+                        {alert.action_taken !== 'dispatch' && (
+                          <button onClick={() => setDispatchTarget(alert)}
+                            style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
+                                     border: '1px solid #93c5fd', color: '#1d4ed8',
+                                     borderRadius: '6px', background: '#eff6ff', cursor: 'pointer',
+                                     whiteSpace: 'nowrap' }}>
+                            🔧 Dispatch
+                          </button>
+                        )}
+                        <button onClick={() => setCreditTarget(alert)}
+                          style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
+                                   border: '1px solid #6ee7b7', color: '#065f46',
+                                   borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer',
+                                   whiteSpace: 'nowrap' }}>
+                          💳 Bill Credit
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+            ))}
+          </div>
+
+          {/* ── Pagination ── */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                {((page - 1) * PER_PAGE + 1).toLocaleString()}–{Math.min(page * PER_PAGE, total).toLocaleString()} of {total.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handlePage(1)} disabled={page === 1}
+                  className="text-xs px-2 py-1.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition">
+                  «
+                </button>
+                <button onClick={() => handlePage(page - 1)} disabled={page === 1}
+                  className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
+                  ← Prev
+                </button>
+
+                {/* Page number pills */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                  const p = start + i;
+                  if (p > totalPages) return null;
+                  return (
+                    <button key={p} onClick={() => handlePage(p)}
+                      className="text-xs px-3 py-1.5 rounded border transition"
+                      style={p === page
+                        ? { background: '#0A4C78', color: '#fff', borderColor: '#0A4C78' }
+                        : { background: '#fff', color: '#374151', borderColor: '#e5e7eb' }}>
+                      {p}
+                    </button>
+                  );
+                })}
+
+                <button onClick={() => handlePage(page + 1)} disabled={page >= totalPages}
+                  className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
+                  Next →
+                </button>
+                <button onClick={() => handlePage(totalPages)} disabled={page >= totalPages}
+                  className="text-xs px-2 py-1.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition">
+                  »
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {dispatchTarget && (

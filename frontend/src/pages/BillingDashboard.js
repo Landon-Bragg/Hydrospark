@@ -7,6 +7,7 @@ import {
   adminSearchBills, updateBill, refundBill, sendNotification,
   getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
 } from '../services/api';
+import { BillInvoice } from './Bills';
 
 const PER_PAGE = 25;
 
@@ -79,6 +80,9 @@ function BillingDashboard() {
   const [panelYear, setPanelYear] = useState('all');
   const [panelGranularity, setPanelGranularity] = useState('monthly'); // 'monthly' | 'daily'
   const [panelDailyRange, setPanelDailyRange] = useState(90); // days: 30 | 90 | 365 | 0 = all
+
+  // Invoice expand/collapse in the bills table
+  const [expandedBill, setExpandedBill] = useState(null);
 
   useEffect(() => {
     fetchStats();
@@ -499,82 +503,111 @@ function BillingDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bills.map(bill => (
-                    <tr key={bill.id} className="border-t hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => openCustomerPanel(bill)}
-                          className="text-left hover:underline"
-                        >
-                          <p className="text-sm font-medium text-hydro-deep-aqua">{bill.customer_name}</p>
-                        </button>
-                        <p className="text-xs text-gray-400">{bill.customer_email}</p>
-                        <p className="text-xs text-gray-400">{bill.location_id}</p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                        {bill.billing_period_start} → {bill.billing_period_end}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-hydro-deep-aqua whitespace-nowrap">
-                        ${parseFloat(bill.total_amount).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                        {bill.due_date}
-                        {bill.paid_at && (
-                          <p className="text-xs text-green-600">
-                            Paid {bill.paid_at.slice(0, 10)}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${STATUS_COLOR[bill.status] || 'bg-gray-100 text-gray-600'}`}>
-                          {bill.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          {bill.status === 'pending' && (
+                  {bills.map(bill => {
+                    const isExp = expandedBill === bill.id;
+                    const customerInfo = {
+                      customer_name: bill.customer_name,
+                      mailing_address: bill.mailing_address,
+                      zip_code: bill.zip_code,
+                      location_id: bill.location_id,
+                      customer_type: bill.customer_type,
+                    };
+                    return (
+                      <React.Fragment key={bill.id}>
+                        <tr className={`border-t ${isExp ? 'bg-blue-50/40' : 'hover:bg-gray-50'}`}>
+                          <td className="px-4 py-3">
                             <button
-                              onClick={() => handleMarkSent(bill)}
-                              className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 transition whitespace-nowrap"
+                              onClick={() => openCustomerPanel(bill)}
+                              className="text-left hover:underline"
                             >
-                              Mark Sent
+                              <p className="text-sm font-medium text-hydro-deep-aqua">{bill.customer_name}</p>
                             </button>
-                          )}
-                          {bill.status !== 'paid' && bill.status !== 'refunded' && (
-                            <button
-                              onClick={() => openRemind(bill)}
-                              className="text-xs px-2.5 py-1 rounded border border-yellow-200 text-yellow-700 hover:bg-yellow-50 transition"
-                            >
-                              Remind
-                            </button>
-                          )}
-                          {bill.status === 'paid' && (
-                            <button
-                              onClick={() => { setRefundingBill(bill); setRefundError(null); }}
-                              className="text-xs px-2.5 py-1 rounded border border-purple-200 text-purple-700 hover:bg-purple-50 transition whitespace-nowrap"
-                            >
-                              Refund
-                            </button>
-                          )}
-                          {bill.status === 'paid' || bill.status === 'refunded' ? (
-                            <span
-                              className="text-xs px-2.5 py-1 rounded border border-gray-100 text-gray-300 cursor-not-allowed"
-                              title="Paid bills cannot be edited"
-                            >
-                              Edit
+                            <p className="text-xs text-gray-400">{bill.customer_email}</p>
+                            <p className="text-xs text-gray-400">{bill.location_id}</p>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {bill.billing_period_start} → {bill.billing_period_end}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-hydro-deep-aqua whitespace-nowrap">
+                            ${parseFloat(bill.total_amount).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {bill.due_date}
+                            {bill.paid_at && (
+                              <p className="text-xs text-green-600">
+                                Paid {bill.paid_at.slice(0, 10)}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${STATUS_COLOR[bill.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {bill.status.toUpperCase()}
                             </span>
-                          ) : (
-                            <button
-                              onClick={() => openEdit(bill)}
-                              className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
-                            >
-                              Edit
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2 flex-wrap">
+                              {bill.status === 'pending' && (
+                                <button
+                                  onClick={() => handleMarkSent(bill)}
+                                  className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 transition whitespace-nowrap"
+                                >
+                                  Mark Sent
+                                </button>
+                              )}
+                              {bill.status !== 'paid' && bill.status !== 'refunded' && (
+                                <button
+                                  onClick={() => openRemind(bill)}
+                                  className="text-xs px-2.5 py-1 rounded border border-yellow-200 text-yellow-700 hover:bg-yellow-50 transition"
+                                >
+                                  Remind
+                                </button>
+                              )}
+                              {bill.status === 'paid' && (
+                                <button
+                                  onClick={() => { setRefundingBill(bill); setRefundError(null); }}
+                                  className="text-xs px-2.5 py-1 rounded border border-purple-200 text-purple-700 hover:bg-purple-50 transition whitespace-nowrap"
+                                >
+                                  Refund
+                                </button>
+                              )}
+                              {bill.status === 'paid' || bill.status === 'refunded' ? (
+                                <span
+                                  className="text-xs px-2.5 py-1 rounded border border-gray-100 text-gray-300 cursor-not-allowed"
+                                  title="Paid bills cannot be edited"
+                                >
+                                  Edit
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => openEdit(bill)}
+                                  className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setExpandedBill(isExp ? null : bill.id)}
+                                className="text-xs px-2.5 py-1 rounded border transition whitespace-nowrap"
+                                style={isExp
+                                  ? { borderColor: 'rgba(30,167,214,0.5)', color: '#0A4C78', background: 'rgba(30,167,214,0.08)' }
+                                  : { borderColor: '#e5e7eb', color: '#6b7280' }}
+                              >
+                                {isExp ? 'Close' : 'View'} <span style={{ display: 'inline-block', transform: isExp ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {isExp && (
+                          <tr>
+                            <td colSpan={6} className="px-5 pb-6 pt-3" style={{ background: 'linear-gradient(to bottom, rgba(239,246,255,0.4), transparent)' }}>
+                              <BillInvoice bill={bill} customer={customerInfo} />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
