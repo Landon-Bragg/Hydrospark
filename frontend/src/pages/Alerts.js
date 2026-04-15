@@ -480,15 +480,12 @@ function Alerts() {
 
       {/* ── Type breakdown row ── */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <TypeCard icon="⚡" label="Spikes"  count={counts.type_spike}   color="#ef4444"
+        <TypeCard icon="⚡" label="Spikes" count={counts.type_spike} color="#ef4444"
           active={typeFilter === 'spike'}
           onClick={() => handleTypeFilter(typeFilter === 'spike' ? '' : 'spike')} />
-        <TypeCard icon="💧" label="Leaks"   count={counts.type_leak}    color="#f97316"
+        <TypeCard icon="💧" label="Leaks"  count={counts.type_leak}  color="#f97316"
           active={typeFilter === 'leak'}
           onClick={() => handleTypeFilter(typeFilter === 'leak' ? '' : 'leak')} />
-        <TypeCard icon="⚠️" label="Unusual" count={counts.type_unusual} color="#eab308"
-          active={typeFilter === 'unusual_pattern'}
-          onClick={() => handleTypeFilter(typeFilter === 'unusual_pattern' ? '' : 'unusual_pattern')} />
       </div>
 
       {/* ── Filter + sort bar ── */}
