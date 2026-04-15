@@ -57,8 +57,13 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
   const [bills, setBills] = useState([]);
   const [billsLoading, setBillsLoading] = useState(false);
 
+  // Daily records pagination
+  const [recordsPage, setRecordsPage] = useState(1);
+  const RECORDS_PER_PAGE = 10;
+
   useEffect(() => {
     setLoadingDetail(true);
+    setRecordsPage(1);
     getUsage({ ...getDateParams(dateRange), customer_id: customer.customer_id })
       .then(res => setUsage(res.data.usage || []))
       .catch(() => setUsage([]))
@@ -195,47 +200,79 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
       <h3 className="text-sm font-semibold text-gray-700 mb-2">Daily Records</h3>
       {usage.length === 0 ? (
         <p className="text-gray-500 text-sm">No records found for this period.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-gray-600">Date</th>
-                <th className="px-4 py-2 text-left text-gray-600">Usage (CCF)</th>
-                <th className="px-4 py-2 text-left text-gray-600">vs Average</th>
-                <th className="px-4 py-2 text-left text-gray-600">Type</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {usage.slice(0, 100).map(r => {
-                const val = parseFloat(r.daily_usage_ccf);
-                const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-1.5">{r.usage_date}</td>
-                    <td className="px-4 py-1.5 font-semibold">{val.toFixed(2)}</td>
-                    <td className="px-4 py-1.5">
-                      <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                        {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-1.5">
-                      {r.is_estimated
-                        ? <span className="text-yellow-600 text-xs">Estimated</span>
-                        : <span className="text-green-600 text-xs">Actual</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {usage.length > 100 && (
-            <p className="text-xs text-gray-400 text-center mt-2">
-              Showing first 100 of {usage.length} records
-            </p>
-          )}
-        </div>
-      )}
+      ) : (() => {
+        const totalRecPages = Math.ceil(usage.length / RECORDS_PER_PAGE);
+        const pageSlice = usage.slice((recordsPage - 1) * RECORDS_PER_PAGE, recordsPage * RECORDS_PER_PAGE);
+        return (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-gray-600">Date</th>
+                  <th className="px-4 py-2 text-left text-gray-600">Usage (CCF)</th>
+                  <th className="px-4 py-2 text-left text-gray-600">vs Average</th>
+                  <th className="px-4 py-2 text-left text-gray-600">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pageSlice.map(r => {
+                  const val = parseFloat(r.daily_usage_ccf);
+                  const diff = avgDaily > 0 ? ((val - avgDaily) / avgDaily * 100) : 0;
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-1.5">{r.usage_date}</td>
+                      <td className="px-4 py-1.5 font-semibold">{val.toFixed(2)}</td>
+                      <td className="px-4 py-1.5">
+                        <span className={`text-xs font-semibold ${diff > 30 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                          {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-1.5">
+                        {r.is_estimated
+                          ? <span className="text-yellow-600 text-xs">Estimated</span>
+                          : <span className="text-green-600 text-xs">Actual</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {totalRecPages > 1 && (
+              <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
+                <p className="text-xs text-gray-400">
+                  {((recordsPage - 1) * RECORDS_PER_PAGE + 1)}–{Math.min(recordsPage * RECORDS_PER_PAGE, usage.length)} of {usage.length}
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setRecordsPage(p => p - 1)}
+                    disabled={recordsPage === 1}
+                    className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition"
+                  >← Prev</button>
+                  {Array.from({ length: Math.min(5, totalRecPages) }, (_, i) => {
+                    const start = Math.max(1, Math.min(recordsPage - 2, totalRecPages - 4));
+                    const p = start + i;
+                    if (p > totalRecPages) return null;
+                    return (
+                      <button key={p} onClick={() => setRecordsPage(p)}
+                        className="text-xs px-2.5 py-1 rounded border transition"
+                        style={p === recordsPage
+                          ? { background: '#0A4C78', color: '#fff', borderColor: '#0A4C78' }
+                          : { background: '#fff', color: '#374151', borderColor: '#e5e7eb' }}>
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setRecordsPage(p => p + 1)}
+                    disabled={recordsPage >= totalRecPages}
+                    className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition"
+                  >Next →</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {canEditBills && (
         <div className="mt-6">
