@@ -304,6 +304,22 @@ def seed_bills_and_alerts():
 with app.app_context():
     seed_bills_and_alerts()
 
+# Remove alert types that should no longer exist (low-usage anomalies)
+def purge_low_usage_alerts():
+    from database import AnomalyAlert
+    try:
+        deleted = AnomalyAlert.query.filter(
+            AnomalyAlert.alert_type.in_(['unusual_pattern', 'leak'])
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        if deleted:
+            print(f'[purge_alerts] Removed {deleted} low-usage alerts (unusual_pattern / leak)')
+    except Exception as e:
+        db.session.rollback()
+        print(f'[purge_alerts] Error: {e}')
+
+with app.app_context():
+    purge_low_usage_alerts()
 
 
 # Import and register blueprints

@@ -298,7 +298,7 @@ function Alerts() {
   // Data
   const [alerts,    setAlerts]    = useState([]);
   const [total,     setTotal]     = useState(0);
-  const [counts,    setCounts]    = useState({ new: 0, acknowledged: 0, resolved: 0, type_spike: 0, type_leak: 0, type_unusual: 0 });
+  const [counts,    setCounts]    = useState({ new: 0, acknowledged: 0, resolved: 0, type_spike: 0 });
   const [loading,   setLoading]   = useState(true);
   const [expanded,  setExpanded]  = useState(null); // alert id for expanded detail
 
@@ -335,7 +335,7 @@ function Alerts() {
       const res = await getAlerts(params);
       setAlerts(res.data.alerts  || []);
       setTotal(res.data.total    || 0);
-      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0, type_spike: 0, type_leak: 0, type_unusual: 0 });
+      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0, type_spike: 0 });
     } catch (err) {
       console.error('Failed to load alerts', err);
     } finally {
@@ -397,9 +397,7 @@ function Alerts() {
   const totalPages = Math.ceil(total / PER_PAGE);
 
   const ALERT_STYLES = {
-    spike:           { border: '#ef4444', bg: '#fef2f2', label: 'Spike',           icon: '⚡' },
-    leak:            { border: '#f97316', bg: '#fff7ed', label: 'Leak',            icon: '💧' },
-    unusual_pattern: { border: '#eab308', bg: '#fefce8', label: 'Unusual Pattern', icon: '⚠️' },
+    spike: { border: '#ef4444', bg: '#fef2f2', label: 'Spike', icon: '⚡' },
   };
 
   const getRiskColor = (score) => {
@@ -426,7 +424,7 @@ function Alerts() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Anomaly Alerts</h1>
-          <p className="text-sm text-gray-400 mt-1">Usage spikes, leaks, and unusual patterns detected by ML</p>
+          <p className="text-sm text-gray-400 mt-1">Usage spikes significantly above expected levels</p>
         </div>
         {isAdmin && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
@@ -483,9 +481,6 @@ function Alerts() {
         <TypeCard icon="⚡" label="Spikes" count={counts.type_spike} color="#ef4444"
           active={typeFilter === 'spike'}
           onClick={() => handleTypeFilter(typeFilter === 'spike' ? '' : 'spike')} />
-        <TypeCard icon="💧" label="Leaks"  count={counts.type_leak}  color="#f97316"
-          active={typeFilter === 'leak'}
-          onClick={() => handleTypeFilter(typeFilter === 'leak' ? '' : 'leak')} />
       </div>
 
       {/* ── Filter + sort bar ── */}

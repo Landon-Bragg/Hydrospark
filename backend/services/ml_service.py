@@ -375,10 +375,7 @@ class MLService:
                     if usage_value <= mean_usage:
                         continue
 
-                    if usage_value > mean_usage * 1.3:
-                        alert_type = 'spike'
-                    else:
-                        alert_type = 'leak'
+                    alert_type = 'spike'
 
                     if deviation > 30:
                         alert = AnomalyAlert(
