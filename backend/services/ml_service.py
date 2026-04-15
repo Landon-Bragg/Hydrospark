@@ -371,14 +371,14 @@ class MLService:
                     deviation   = ((usage_value - mean_usage) / mean_usage) * 100 if mean_usage > 0 else 0
                     risk_score  = min(100, abs(deviation))
 
-                    if usage_value > mean_usage + 2 * std_usage:
+                    if usage_value > mean_usage * 1.3:
                         alert_type = 'spike'
-                    elif usage_value < mean_usage * 0.3:
+                    elif usage_value < mean_usage * 0.5:
                         alert_type = 'unusual_pattern'
                     else:
                         alert_type = 'leak'
 
-                    if abs(deviation) > 50:
+                    if abs(deviation) > 30:
                         alert = AnomalyAlert(
                             customer_id=customer_id,
                             alert_date=date,

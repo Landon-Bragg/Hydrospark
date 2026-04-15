@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { getAlerts, acknowledgeAlert, dispatchAlert, applyBillAdjustment } from '../services/api';
+import { getAlerts, acknowledgeAlert, dispatchAlert, applyBillAdjustment, detectAnomalies } from '../services/api';
 
-// ── Suggested credit helper ───────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_RATE = 5.72;
+const PER_PAGE     = 25;
 
-function suggestedCredit(alert) {
+function dollarImpact(alert) {
   const excess = Math.max(0, parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf));
-  return (excess * DEFAULT_RATE).toFixed(2);
+  return excess * DEFAULT_RATE;
 }
 
 // ── Shared modal shell ────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ function Modal({ onClose, children }) {
   );
 }
 
-// ── Alert summary row shown inside both modals ────────────────────────────────
+// ── Alert summary row shown inside both action modals ─────────────────────────
 function AlertSummary({ alert }) {
   const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
   const sign = diff >= 0 ? '+' : '';
@@ -71,7 +72,7 @@ function AlertSummary({ alert }) {
 function DispatchModal({ alert, onClose, onSuccess }) {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]   = useState(null);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -109,7 +110,13 @@ function DispatchModal({ alert, onClose, onSuccess }) {
         style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '8px', padding: '10px 12px',
                  fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
       />
-      {error && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>}
+      {error && (
+        <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600,
+                    background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px',
+                    padding: '8px 12px' }}>
+          {error}
+        </p>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
         <button onClick={onClose} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #d1d5db',
@@ -129,13 +136,12 @@ function DispatchModal({ alert, onClose, onSuccess }) {
 
 // ── Bill credit modal ─────────────────────────────────────────────────────────
 function BillCreditModal({ alert, onClose, onSuccess }) {
-  const suggested = suggestedCredit(alert);
+  const excess    = Math.max(0, parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf));
+  const suggested = (excess * DEFAULT_RATE).toFixed(2);
   const [amount, setAmount]   = useState(suggested);
   const [note, setNote]       = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
-
-  const excess = Math.max(0, parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf));
 
   const handleSubmit = async () => {
     const parsed = parseFloat(amount);
@@ -188,7 +194,13 @@ function BillCreditModal({ alert, onClose, onSuccess }) {
         style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '8px', padding: '10px 12px',
                  fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
       />
-      {error && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600 }}>{error}</p>}
+      {error && (
+        <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '10px', fontWeight: 600,
+                    background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px',
+                    padding: '8px 12px' }}>
+          {error}
+        </p>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
         <button onClick={onClose} disabled={loading}
           style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #d1d5db',
@@ -234,17 +246,39 @@ function Pill({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className="px-3 py-1 text-xs font-semibold rounded-full border transition-colors whitespace-nowrap"
       style={active
-        ? { background: '#0A4C78', color: '#fff', borderColor: '#0A4C78' }
-        : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }}
+        ? { background: '#0A4C78', color: '#fff', borderColor: '#0A4C78',
+            padding: '4px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '9999px',
+            border: '1px solid', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .15s' }
+        : { background: '#fff', color: '#374151', borderColor: '#d1d5db',
+            padding: '4px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '9999px',
+            border: '1px solid', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .15s' }}
     >
       {children}
     </button>
   );
 }
 
-const PER_PAGE = 25;
+// ── Type breakdown mini card ──────────────────────────────────────────────────
+function TypeCard({ icon, label, count, color, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: '10px', cursor: 'pointer',
+        textAlign: 'left', border: active ? `2px solid ${color}` : '2px solid transparent',
+        background: active ? `${color}15` : '#f9fafb',
+        transition: 'all .15s',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+        <span style={{ fontSize: '16px' }}>{icon}</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</span>
+      </div>
+      <p style={{ fontSize: '22px', fontWeight: 800, color, margin: 0, lineHeight: 1 }}>{count.toLocaleString()}</p>
+    </button>
+  );
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 function Alerts() {
@@ -252,20 +286,25 @@ function Alerts() {
   const isAdmin = user?.role === 'admin' || user?.role === 'billing';
 
   // Filters — all server-side
-  const [statusFilter,    setStatusFilter]    = useState('');
-  const [typeFilter,      setTypeFilter]      = useState('');
-  const [riskFilter,      setRiskFilter]      = useState('');
-  const [dateFrom,        setDateFrom]        = useState('');
-  const [dateTo,          setDateTo]          = useState('');
-  const [customerSearch,  setCustomerSearch]  = useState('');
-  const [sortBy,          setSortBy]          = useState('date_desc');
-  const [page,            setPage]            = useState(1);
+  const [statusFilter,   setStatusFilter]   = useState('');
+  const [typeFilter,     setTypeFilter]     = useState('');
+  const [riskFilter,     setRiskFilter]     = useState('');
+  const [dateFrom,       setDateFrom]       = useState('');
+  const [dateTo,         setDateTo]         = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [sortBy,         setSortBy]         = useState('date_desc');
+  const [page,           setPage]           = useState(1);
 
   // Data
-  const [alerts,  setAlerts]  = useState([]);
-  const [total,   setTotal]   = useState(0);
-  const [counts,  setCounts]  = useState({ new: 0, acknowledged: 0, resolved: 0 });
-  const [loading, setLoading] = useState(true);
+  const [alerts,    setAlerts]    = useState([]);
+  const [total,     setTotal]     = useState(0);
+  const [counts,    setCounts]    = useState({ new: 0, acknowledged: 0, resolved: 0, type_spike: 0, type_leak: 0, type_unusual: 0 });
+  const [loading,   setLoading]   = useState(true);
+  const [expanded,  setExpanded]  = useState(null); // alert id for expanded detail
+
+  // Run detection
+  const [detecting,     setDetecting]     = useState(false);
+  const [detectResult,  setDetectResult]  = useState(null);
 
   // Action modals
   const [dispatchTarget, setDispatchTarget] = useState(null);
@@ -276,24 +315,27 @@ function Alerts() {
   const loadAlerts = async (overrides = {}) => {
     setLoading(true);
     try {
-      const p = overrides.page         ?? page;
-      const params = { page: p, per_page: PER_PAGE, sort: overrides.sort ?? sortBy };
+      const p  = overrides.page        ?? page;
       const st = overrides.status      !== undefined ? overrides.status      : statusFilter;
       const ty = overrides.alert_type  !== undefined ? overrides.alert_type  : typeFilter;
       const rl = overrides.risk_level  !== undefined ? overrides.risk_level  : riskFilter;
       const df = overrides.date_from   !== undefined ? overrides.date_from   : dateFrom;
       const dt = overrides.date_to     !== undefined ? overrides.date_to     : dateTo;
       const sr = overrides.search      !== undefined ? overrides.search      : customerSearch;
+      const so = overrides.sort        !== undefined ? overrides.sort        : sortBy;
+
+      const params = { page: p, per_page: PER_PAGE, sort: so };
       if (st) params.status     = st;
       if (ty) params.alert_type = ty;
       if (rl) params.risk_level = rl;
       if (df) params.date_from  = df;
       if (dt) params.date_to    = dt;
       if (sr) params.search     = sr;
+
       const res = await getAlerts(params);
       setAlerts(res.data.alerts  || []);
       setTotal(res.data.total    || 0);
-      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0 });
+      setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0, type_spike: 0, type_leak: 0, type_unusual: 0 });
     } catch (err) {
       console.error('Failed to load alerts', err);
     } finally {
@@ -301,7 +343,6 @@ function Alerts() {
     }
   };
 
-  // Initial load
   useEffect(() => { loadAlerts(); }, []); // eslint-disable-line
 
   // Debounce customer search
@@ -315,34 +356,13 @@ function Alerts() {
     }, 400);
   };
 
-  const handleStatusFilter = (val) => {
-    setStatusFilter(val); setPage(1);
-    loadAlerts({ status: val, page: 1 });
-  };
-  const handleTypeFilter = (val) => {
-    setTypeFilter(val); setPage(1);
-    loadAlerts({ alert_type: val, page: 1 });
-  };
-  const handleRiskFilter = (val) => {
-    setRiskFilter(val); setPage(1);
-    loadAlerts({ risk_level: val, page: 1 });
-  };
-  const handleDateFrom = (val) => {
-    setDateFrom(val); setPage(1);
-    loadAlerts({ date_from: val, page: 1 });
-  };
-  const handleDateTo = (val) => {
-    setDateTo(val); setPage(1);
-    loadAlerts({ date_to: val, page: 1 });
-  };
-  const handleSort = (val) => {
-    setSortBy(val); setPage(1);
-    loadAlerts({ sort: val, page: 1 });
-  };
-  const handlePage = (p) => {
-    setPage(p);
-    loadAlerts({ page: p });
-  };
+  const handleStatusFilter = (val) => { setStatusFilter(val); setPage(1); loadAlerts({ status: val, page: 1 }); };
+  const handleTypeFilter   = (val) => { setTypeFilter(val);   setPage(1); loadAlerts({ alert_type: val, page: 1 }); };
+  const handleRiskFilter   = (val) => { setRiskFilter(val);   setPage(1); loadAlerts({ risk_level: val, page: 1 }); };
+  const handleDateFrom     = (val) => { setDateFrom(val);     setPage(1); loadAlerts({ date_from: val, page: 1 }); };
+  const handleDateTo       = (val) => { setDateTo(val);       setPage(1); loadAlerts({ date_to: val, page: 1 }); };
+  const handleSort         = (val) => { setSortBy(val);       setPage(1); loadAlerts({ sort: val, page: 1 }); };
+  const handlePage         = (p)   => { setPage(p);                       loadAlerts({ page: p }); };
 
   const clearFilters = () => {
     setTypeFilter(''); setRiskFilter(''); setDateFrom(''); setDateTo(''); setCustomerSearch('');
@@ -354,22 +374,50 @@ function Alerts() {
     try {
       await acknowledgeAlert(alertId);
       loadAlerts();
-    } catch (err) { console.error('Failed to acknowledge alert', err); }
+    } catch (err) {
+      console.error('Failed to acknowledge alert', err);
+    }
+  };
+
+  const handleRunDetection = async () => {
+    setDetecting(true);
+    setDetectResult(null);
+    try {
+      const res = await detectAnomalies();
+      setDetectResult({ ok: true, count: res.data.anomalies?.length ?? 0 });
+      loadAlerts();
+    } catch (err) {
+      setDetectResult({ ok: false, msg: err.response?.data?.error || 'Detection failed' });
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const hasActiveFilters = typeFilter || riskFilter || dateFrom || dateTo || customerSearch;
   const totalPages = Math.ceil(total / PER_PAGE);
 
-  const getAlertColor = (type) => ({
-    spike:           'border-red-500 bg-red-50',
-    leak:            'border-orange-500 bg-orange-50',
-    unusual_pattern: 'border-yellow-500 bg-yellow-50',
-  }[type] || 'border-gray-500 bg-gray-50');
+  const ALERT_STYLES = {
+    spike:           { border: '#ef4444', bg: '#fef2f2', label: 'Spike',           icon: '⚡' },
+    leak:            { border: '#f97316', bg: '#fff7ed', label: 'Leak',            icon: '💧' },
+    unusual_pattern: { border: '#eab308', bg: '#fefce8', label: 'Unusual Pattern', icon: '⚠️' },
+  };
 
   const getRiskColor = (score) => {
-    if (score >= 75) return 'text-red-600';
-    if (score >= 50) return 'text-orange-600';
-    return 'text-yellow-600';
+    if (score >= 75) return '#dc2626';
+    if (score >= 50) return '#ea580c';
+    return '#ca8a04';
+  };
+
+  const getRiskLabel = (score) => {
+    if (score >= 75) return 'High';
+    if (score >= 50) return 'Medium';
+    return 'Low';
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return null;
+    try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
   };
 
   return (
@@ -378,40 +426,78 @@ function Alerts() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Anomaly Alerts</h1>
-          <p className="text-sm text-gray-400 mt-1">Usage spikes, leaks, and unusual patterns</p>
+          <p className="text-sm text-gray-400 mt-1">Usage spikes, leaks, and unusual patterns detected by ML</p>
+        </div>
+        {isAdmin && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+            <button
+              onClick={handleRunDetection}
+              disabled={detecting}
+              style={{
+                padding: '9px 18px', borderRadius: '8px', border: 'none', cursor: detecting ? 'not-allowed' : 'pointer',
+                background: detecting ? '#93c5fd' : '#0A4C78', color: '#fff',
+                fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px',
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>🔍</span>
+              {detecting ? 'Running Detection…' : 'Run Detection'}
+            </button>
+            {detectResult && (
+              <p style={{
+                fontSize: '12px', fontWeight: 600, margin: 0,
+                color: detectResult.ok ? '#059669' : '#dc2626',
+              }}>
+                {detectResult.ok
+                  ? `Detection complete — ${detectResult.count} new anomalies found`
+                  : detectResult.msg}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Status summary cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white" style={{ cursor: 'pointer' }}
+          onClick={() => handleStatusFilter(statusFilter === 'new' ? '' : 'new')}>
+          <p className="text-sm mb-1 opacity-80">New Alerts</p>
+          <p className="text-3xl font-bold">{counts.new.toLocaleString()}</p>
+          {statusFilter === 'new' && <p style={{ fontSize: '10px', marginTop: '4px', opacity: .8 }}>FILTERED</p>}
+        </div>
+        <div className="card bg-gradient-to-br from-yellow-500 to-yellow-600 text-white" style={{ cursor: 'pointer' }}
+          onClick={() => handleStatusFilter(statusFilter === 'acknowledged' ? '' : 'acknowledged')}>
+          <p className="text-sm mb-1 opacity-80">Acknowledged</p>
+          <p className="text-3xl font-bold">{counts.acknowledged.toLocaleString()}</p>
+          {statusFilter === 'acknowledged' && <p style={{ fontSize: '10px', marginTop: '4px', opacity: .8 }}>FILTERED</p>}
+        </div>
+        <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white" style={{ cursor: 'pointer' }}
+          onClick={() => handleStatusFilter(statusFilter === 'resolved' ? '' : 'resolved')}>
+          <p className="text-sm mb-1 opacity-80">Resolved</p>
+          <p className="text-3xl font-bold">{counts.resolved.toLocaleString()}</p>
+          {statusFilter === 'resolved' && <p style={{ fontSize: '10px', marginTop: '4px', opacity: .8 }}>FILTERED</p>}
         </div>
       </div>
 
-      {/* ── Summary cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white">
-          <p className="text-sm mb-1">New Alerts</p>
-          <p className="text-3xl font-bold">{counts.new.toLocaleString()}</p>
-        </div>
-        <div className="card bg-gradient-to-br from-yellow-500 to-yellow-600 text-white">
-          <p className="text-sm mb-1">Acknowledged</p>
-          <p className="text-3xl font-bold">{counts.acknowledged.toLocaleString()}</p>
-        </div>
-        <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
-          <p className="text-sm mb-1">Resolved</p>
-          <p className="text-3xl font-bold">{counts.resolved.toLocaleString()}</p>
-        </div>
+      {/* ── Type breakdown row ── */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <TypeCard icon="⚡" label="Spikes"  count={counts.type_spike}   color="#ef4444"
+          active={typeFilter === 'spike'}
+          onClick={() => handleTypeFilter(typeFilter === 'spike' ? '' : 'spike')} />
+        <TypeCard icon="💧" label="Leaks"   count={counts.type_leak}    color="#f97316"
+          active={typeFilter === 'leak'}
+          onClick={() => handleTypeFilter(typeFilter === 'leak' ? '' : 'leak')} />
+        <TypeCard icon="⚠️" label="Unusual" count={counts.type_unusual} color="#eab308"
+          active={typeFilter === 'unusual_pattern'}
+          onClick={() => handleTypeFilter(typeFilter === 'unusual_pattern' ? '' : 'unusual_pattern')} />
       </div>
 
       {/* ── Filter + sort bar ── */}
       <div className="card mb-5 space-y-3">
-        {/* Row 1: status + type + risk */}
+        {/* Row 1: status + risk */}
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Status</span>
           {[['','All'],['new','New'],['acknowledged','Acknowledged'],['resolved','Resolved']].map(([val, label]) => (
             <Pill key={val} active={statusFilter === val} onClick={() => handleStatusFilter(val)}>{label}</Pill>
-          ))}
-
-          <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
-
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Type</span>
-          {[['','All'],['spike','Spike'],['leak','Leak'],['unusual_pattern','Unusual']].map(([val, label]) => (
-            <Pill key={val} active={typeFilter === val} onClick={() => handleTypeFilter(val)}>{label}</Pill>
           ))}
 
           <span className="text-gray-200 mx-1 hidden sm:inline">|</span>
@@ -488,105 +574,196 @@ function Alerts() {
         </div>
       ) : (
         <>
-          <div className="space-y-4">
-            {alerts.map((alert) => (
-              <div key={alert.id} className={`card border-l-4 ${getAlertColor(alert.alert_type)}`}>
-                <div className="flex justify-between items-start gap-4">
-                  {/* Left: alert details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-lg font-bold text-gray-800 capitalize">
-                        {alert.alert_type.replace('_', ' ')}
-                      </h3>
-                      <span className={`text-2xl font-bold ${getRiskColor(alert.risk_score)}`}>
-                        Risk: {parseFloat(alert.risk_score).toFixed(0)}%
+          <div className="space-y-3">
+            {alerts.map((alert) => {
+              const style   = ALERT_STYLES[alert.alert_type] || ALERT_STYLES.spike;
+              const impact  = dollarImpact(alert);
+              const diff    = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
+              const pct     = parseFloat(alert.deviation_percentage);
+              const sign    = diff >= 0 ? '+' : '';
+              const isOpen  = expanded === alert.id;
+              const rScore  = parseFloat(alert.risk_score);
+
+              return (
+                <div key={alert.id}
+                  style={{ background: '#fff', border: `1px solid #e5e7eb`, borderLeft: `4px solid ${style.border}`,
+                           borderRadius: '10px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+
+                  {/* ── Main row ── */}
+                  <div style={{ padding: '14px 18px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+
+                    {/* Left: type icon + risk badge */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+                                  flexShrink: 0, paddingTop: '2px' }}>
+                      <span style={{ fontSize: '22px', lineHeight: 1 }}>{style.icon}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: getRiskColor(rScore),
+                                     background: `${getRiskColor(rScore)}18`, padding: '1px 6px',
+                                     borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                        {getRiskLabel(rScore)} {rScore.toFixed(0)}
                       </span>
                     </div>
 
-                    {(alert.customer_name || alert.customer_email) && (
-                      <div className="text-sm text-gray-600 mb-2">
-                        <span className="font-medium">{alert.customer_name}</span>
-                        {alert.customer_email && (
-                          <span className="ml-2 text-gray-400">{alert.customer_email}</span>
+                    {/* Center: details */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Title row */}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#111', margin: 0 }}>
+                          {style.label}
+                        </h3>
+                        {(alert.customer_name || alert.customer_email) && (
+                          <span style={{ fontSize: '13px', color: '#374151', fontWeight: 600 }}>
+                            {alert.customer_name}
+                            {alert.customer_email && (
+                              <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '6px' }}>{alert.customer_email}</span>
+                            )}
+                          </span>
                         )}
                       </div>
-                    )}
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-600">Date</p>
-                        <p className="font-semibold">{alert.alert_date}</p>
+                      {/* Metrics row */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '13px' }}>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Date </span>
+                          <span style={{ fontWeight: 600 }}>{alert.alert_date}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Usage </span>
+                          <span style={{ fontWeight: 600 }}>{parseFloat(alert.usage_ccf).toFixed(2)} CCF</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Expected </span>
+                          <span style={{ fontWeight: 600 }}>{parseFloat(alert.expected_usage_ccf).toFixed(2)} CCF</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280' }}>Deviation </span>
+                          <span style={{ fontWeight: 700, color: diff > 0 ? '#dc2626' : '#059669' }}>
+                            {sign}{diff.toFixed(2)} CCF ({sign}{pct.toFixed(1)}%)
+                          </span>
+                        </div>
+                        {impact > 0.01 && (
+                          <div>
+                            <span style={{ color: '#6b7280' }}>Est. Impact </span>
+                            <span style={{ fontWeight: 700, color: '#b45309' }}>${impact.toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-gray-600">Usage</p>
-                        <p className="font-semibold">{parseFloat(alert.usage_ccf).toFixed(2)} CCF</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Expected</p>
-                        <p className="font-semibold">{parseFloat(alert.expected_usage_ccf).toFixed(2)} CCF</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600">Deviation</p>
-                        {(() => {
-                          const diff = parseFloat(alert.usage_ccf) - parseFloat(alert.expected_usage_ccf);
-                          const pct  = parseFloat(alert.deviation_percentage);
-                          const sign = diff >= 0 ? '+' : '';
-                          return (
-                            <>
-                              <p className="font-bold text-red-600">{sign}{diff.toFixed(2)} CCF</p>
-                              <p className="text-xs text-gray-400 mt-0.5">{sign}{pct.toFixed(1)}% vs expected</p>
-                            </>
-                          );
-                        })()}
+
+                      {/* Badges row */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                        <ActionBadge alert={alert} />
+                        {alert.notes && (
+                          <span style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic',
+                                         background: '#f3f4f6', padding: '2px 8px', borderRadius: '4px' }}>
+                            "{alert.notes.length > 60 ? alert.notes.slice(0, 60) + '…' : alert.notes}"
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {alert.notes && (
-                      <p className="mt-3 text-xs text-gray-500 italic bg-white border border-gray-100 rounded px-3 py-2">
-                        Note: {alert.notes}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Right: status, badges, actions */}
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    {alert.status === 'new' && (
-                      <button onClick={() => handleAcknowledge(alert.id)} className="btn-secondary">
-                        Acknowledge
-                      </button>
-                    )}
-                    {alert.status !== 'new' && (
-                      <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm font-semibold">
-                        {alert.status.toUpperCase()}
-                      </span>
-                    )}
-
-                    <ActionBadge alert={alert} />
-
-                    {isAdmin && alert.status !== 'resolved' && (
-                      <div className="flex gap-1.5 mt-1">
-                        {alert.action_taken !== 'dispatch' && (
-                          <button onClick={() => setDispatchTarget(alert)}
-                            style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
-                                     border: '1px solid #93c5fd', color: '#1d4ed8',
-                                     borderRadius: '6px', background: '#eff6ff', cursor: 'pointer',
-                                     whiteSpace: 'nowrap' }}>
-                            🔧 Dispatch
-                          </button>
-                        )}
-                        <button onClick={() => setCreditTarget(alert)}
+                    {/* Right: status + actions */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                      {alert.status === 'new' && (
+                        <button onClick={() => handleAcknowledge(alert.id)}
                           style={{ padding: '5px 12px', fontSize: '12px', fontWeight: 600,
-                                   border: '1px solid #6ee7b7', color: '#065f46',
-                                   borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer',
-                                   whiteSpace: 'nowrap' }}>
-                          💳 Bill Credit
+                                   border: '1px solid #d1d5db', color: '#374151',
+                                   borderRadius: '6px', background: '#fff', cursor: 'pointer' }}>
+                          Acknowledge
                         </button>
-                      </div>
-                    )}
+                      )}
+                      {alert.status !== 'new' && (
+                        <span style={{ padding: '3px 10px', background: alert.status === 'resolved' ? '#d1fae5' : '#fef9c3',
+                                       color: alert.status === 'resolved' ? '#065f46' : '#713f12',
+                                       border: `1px solid ${alert.status === 'resolved' ? '#a7f3d0' : '#fde68a'}`,
+                                       borderRadius: '20px', fontSize: '11px', fontWeight: 700 }}>
+                          {alert.status.toUpperCase()}
+                        </span>
+                      )}
+
+                      {isAdmin && alert.status !== 'resolved' && (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          {alert.action_taken !== 'dispatch' && (
+                            <button onClick={() => setDispatchTarget(alert)}
+                              style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600,
+                                       border: '1px solid #93c5fd', color: '#1d4ed8',
+                                       borderRadius: '6px', background: '#eff6ff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              🔧 Dispatch
+                            </button>
+                          )}
+                          {alert.action_taken !== 'bill_adjustment' && (
+                            <button onClick={() => setCreditTarget(alert)}
+                              style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600,
+                                       border: '1px solid #6ee7b7', color: '#065f46',
+                                       borderRadius: '6px', background: '#ecfdf5', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              💳 Credit
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Expand toggle */}
+                      <button
+                        onClick={() => setExpanded(isOpen ? null : alert.id)}
+                        style={{ fontSize: '11px', color: '#9ca3af', background: 'none', border: 'none',
+                                 cursor: 'pointer', padding: '2px 4px', marginTop: '2px' }}>
+                        {isOpen ? 'Less ▲' : 'Details ▾'}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* ── Expanded detail panel ── */}
+                  {isOpen && (
+                    <div style={{ background: '#f9fafb', borderTop: '1px solid #f0f0f0', padding: '14px 18px 14px 56px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', fontSize: '12px' }}>
+
+                        {/* Customer context */}
+                        {(alert.location_id || alert.customer_type || alert.zip_code) && (
+                          <div>
+                            <p style={{ fontWeight: 700, color: '#374151', marginBottom: '6px', fontSize: '11px',
+                                        textTransform: 'uppercase', letterSpacing: '.04em' }}>Customer</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#4b5563' }}>
+                              {alert.location_id   && <span>Location ID: <strong>{alert.location_id}</strong></span>}
+                              {alert.customer_type && <span>Type: <strong>{alert.customer_type}</strong></span>}
+                              {alert.zip_code      && <span>Zip: <strong>{alert.zip_code}</strong></span>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Timeline */}
+                        <div>
+                          <p style={{ fontWeight: 700, color: '#374151', marginBottom: '6px', fontSize: '11px',
+                                      textTransform: 'uppercase', letterSpacing: '.04em' }}>Timeline</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#4b5563' }}>
+                            {alert.created_at    && <span>Detected: <strong>{fmtDate(alert.created_at)}</strong></span>}
+                            {alert.dispatched_at && <span>Dispatched: <strong>{fmtDate(alert.dispatched_at)}</strong></span>}
+                            {alert.resolved_at   && <span>Resolved: <strong>{fmtDate(alert.resolved_at)}</strong></span>}
+                          </div>
+                        </div>
+
+                        {/* Credit detail */}
+                        {alert.bill_adjustment_amount && (
+                          <div>
+                            <p style={{ fontWeight: 700, color: '#374151', marginBottom: '6px', fontSize: '11px',
+                                        textTransform: 'uppercase', letterSpacing: '.04em' }}>Credit Applied</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#4b5563' }}>
+                              <span>Amount: <strong style={{ color: '#059669' }}>${parseFloat(alert.bill_adjustment_amount).toFixed(2)}</strong></span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Notes */}
+                        {alert.notes && (
+                          <div style={{ flex: '1 1 200px' }}>
+                            <p style={{ fontWeight: 700, color: '#374151', marginBottom: '6px', fontSize: '11px',
+                                        textTransform: 'uppercase', letterSpacing: '.04em' }}>Notes</p>
+                            <p style={{ color: '#4b5563', fontStyle: 'italic', margin: 0 }}>{alert.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* ── Pagination ── */}
@@ -604,8 +781,6 @@ function Alerts() {
                   className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
                   ← Prev
                 </button>
-
-                {/* Page number pills */}
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
                   const p = start + i;
@@ -620,7 +795,6 @@ function Alerts() {
                     </button>
                   );
                 })}
-
                 <button onClick={() => handlePage(page + 1)} disabled={page >= totalPages}
                   className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
                   Next →

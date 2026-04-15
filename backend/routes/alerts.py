@@ -80,9 +80,12 @@ def get_alerts():
         if customer_id:
             base_q = base_q.filter(AnomalyAlert.customer_id == customer_id)
         counts = {
-            'new':          base_q.filter(AnomalyAlert.status == 'new').count(),
-            'acknowledged': base_q.filter(AnomalyAlert.status == 'acknowledged').count(),
-            'resolved':     base_q.filter(AnomalyAlert.status == 'resolved').count(),
+            'new':             base_q.filter(AnomalyAlert.status == 'new').count(),
+            'acknowledged':    base_q.filter(AnomalyAlert.status == 'acknowledged').count(),
+            'resolved':        base_q.filter(AnomalyAlert.status == 'resolved').count(),
+            'type_spike':      base_q.filter(AnomalyAlert.alert_type == 'spike').count(),
+            'type_leak':       base_q.filter(AnomalyAlert.alert_type == 'leak').count(),
+            'type_unusual':    base_q.filter(AnomalyAlert.alert_type == 'unusual_pattern').count(),
         }
 
         return jsonify({
@@ -101,18 +104,21 @@ def get_alerts():
 def acknowledge_alert(alert_id):
     """Acknowledge an alert"""
     try:
-        alert = AnomalyAlert.query.get(alert_id)
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
         if not alert:
             return jsonify({'error': 'Alert not found'}), 404
-        
+
+        if alert.status != 'new':
+            return jsonify({'error': f'Alert is already {alert.status}'}), 409
+
         alert.status = 'acknowledged'
         db.session.commit()
-        
+
         return jsonify({
             'message': 'Alert acknowledged',
             'alert': alert.to_dict()
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -120,12 +126,19 @@ def acknowledge_alert(alert_id):
 def _alert_dict(alert):
     """Serialize alert with customer info."""
     d = alert.to_dict()
+    d['resolved_at'] = alert.resolved_at.isoformat() if alert.resolved_at else None
     if alert.customer:
-        d['customer_name'] = alert.customer.customer_name
+        d['customer_name']  = alert.customer.customer_name
         d['customer_email'] = alert.customer.user.email if alert.customer.user else None
+        d['location_id']    = alert.customer.location_id
+        d['customer_type']  = alert.customer.customer_type
+        d['zip_code']       = alert.customer.zip_code
     else:
-        d['customer_name'] = None
+        d['customer_name']  = None
         d['customer_email'] = None
+        d['location_id']    = None
+        d['customer_type']  = None
+        d['zip_code']       = None
     return d
 
 
@@ -139,12 +152,16 @@ def dispatch_alert(alert_id):
         if user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
 
-        alert = AnomalyAlert.query.get(alert_id)
+        # Lock the row so two concurrent admins can't both dispatch the same alert
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
         if not alert:
             return jsonify({'error': 'Alert not found'}), 404
 
         if alert.status == 'resolved':
-            return jsonify({'error': 'Alert is already resolved'}), 400
+            return jsonify({'error': 'Alert is already resolved'}), 409
+
+        if alert.action_taken == 'dispatch':
+            return jsonify({'error': 'Investigation already dispatched by another admin'}), 409
 
         data = request.get_json() or {}
         notes = (data.get('notes') or '').strip()
@@ -201,12 +218,18 @@ def adjust_bill_for_alert(alert_id):
         if user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
 
-        alert = AnomalyAlert.query.get(alert_id)
+        # Lock the alert row first — prevents two admins from both applying a credit
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
         if not alert:
             return jsonify({'error': 'Alert not found'}), 404
 
         if alert.status == 'resolved':
-            return jsonify({'error': 'Alert is already resolved'}), 400
+            return jsonify({'error': 'Alert already resolved by another admin'}), 409
+
+        if alert.bill_adjustment_amount is not None:
+            return jsonify({
+                'error': f'A credit of ${float(alert.bill_adjustment_amount):.2f} was already applied to this alert'
+            }), 409
 
         data = request.get_json() or {}
         try:
@@ -219,8 +242,8 @@ def adjust_bill_for_alert(alert_id):
 
         note = (data.get('note') or '').strip()
 
-        # Find the bill covering alert_date
-        bill = Bill.query.filter(
+        # Find the bill covering alert_date, lock it too
+        bill = Bill.query.with_for_update().filter(
             Bill.customer_id == alert.customer_id,
             Bill.billing_period_start <= alert.alert_date,
             Bill.billing_period_end >= alert.alert_date,
@@ -233,7 +256,7 @@ def adjust_bill_for_alert(alert_id):
             }), 404
 
         if bill.status == 'refunded':
-            return jsonify({'error': 'Cannot adjust a refunded bill'}), 400
+            return jsonify({'error': 'Cannot adjust a refunded bill'}), 409
 
         original_amount = float(bill.total_amount)
         new_amount = max(0.0, round(original_amount - amount, 2))
