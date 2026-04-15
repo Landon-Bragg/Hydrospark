@@ -28,7 +28,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.Enum('admin', 'billing', 'customer'), default='customer')
+    role = db.Column(db.Enum('admin', 'billing', 'customer', 'field'), default='customer')
     first_name = db.Column(db.String(100))
     last_name = db.Column(db.String(100))
     phone = db.Column(db.String(20))
@@ -195,6 +195,7 @@ class AnomalyAlert(db.Model):
     dispatched_at = db.Column(db.DateTime, nullable=True)
     notes = db.Column(db.Text, nullable=True)
     bill_adjustment_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    completion_notes = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
@@ -213,6 +214,8 @@ class AnomalyAlert(db.Model):
             'dispatched_at': self.dispatched_at.isoformat() if self.dispatched_at else None,
             'notes': self.notes,
             'bill_adjustment_amount': float(self.bill_adjustment_amount) if self.bill_adjustment_amount else None,
+            'completion_notes': self.completion_notes,
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
         }
 
 # Usage Forecast Model

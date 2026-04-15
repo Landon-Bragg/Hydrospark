@@ -63,7 +63,7 @@ Then open your browser to: **http://localhost:3000**
 
 ## Signing In
 
-There are three roles, each with a different login and set of features:
+There are four roles, each with a different login and set of features:
 
 ---
 
@@ -76,7 +76,7 @@ Password: admin123
 
 Full system access — user management, data import, bill generation, anomaly detection, zip analytics, water shutoff, and everything in the Billing/Support role.
 
-**Navigation:** Dashboard · Usage · Forecasts · Bills · Alerts · Inbox · Admin
+**Navigation:** Dashboard · Usage · Forecasts · Inbox · Admin
 
 ---
 
@@ -87,9 +87,22 @@ Email:    billing@hydrospark.com
 Password: billing123
 ```
 
-Support-focused access — view and manage all customer bills and usage data, message customers directly through the inbox, and send notifications to individual customers or broadcast alerts to all customers.
+Support-focused access — view and manage all customer bills and usage data, triage anomaly alerts (acknowledge, dispatch field teams, apply bill credits), message customers directly through the inbox, and send notifications to individual customers or broadcast to all.
 
-**Navigation:** Inbox · Usage · Bills
+**Navigation:** Billing · Alerts · Inbox · Usage
+
+---
+
+### Field Technician
+
+```
+Email:    field@hydrospark.com
+Password: field123
+```
+
+Field team access — see only the work orders that have been dispatched by the billing team. Each work order shows the customer address, alert details, overage CCF, estimated bill impact, and any dispatch notes. Mark jobs complete with field notes, which automatically notifies billing.
+
+**Navigation:** Work Orders
 
 ---
 
@@ -193,12 +206,26 @@ docker-compose up
 | **Bills** | All past bills — click any row to expand full invoice details |
 | **Forecasts** | Generate a 12-month ML usage and cost prediction |
 
-### For Admins (in addition to the above)
+### For Billing / Support
+
+| Tab | What it shows |
+|-----|--------------|
+| **Billing** | All customer bills with filters, stats cards, and inline invoice expansion |
+| **Alerts** | Anomaly alerts — acknowledge, dispatch to field, or apply bill credits |
+| **Inbox** | Direct messages with customers and broadcast notifications |
+| **Usage** | Full usage data across all customers |
+
+### For Admins (all of the above, plus)
 
 | Tab | What it shows |
 |-----|--------------|
 | **Admin** | User management, data import, bill generation, anomaly detection, zip code rates, and water shutoff management |
-| **Alerts** | All anomaly alerts across all customers, sorted by date |
+
+### For Field Technicians
+
+| Tab | What it shows |
+|-----|--------------|
+| **Work Orders** | Open dispatched jobs with customer address, usage overage, and dispatch notes — mark complete with field notes |
 
 ### HydroBot (all users)
 

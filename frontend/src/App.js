@@ -13,6 +13,7 @@ import BillingDashboard from './pages/BillingDashboard';
 import Pay from './pages/Pay';
 import Inbox from './pages/Inbox';
 import AcceptInvite from './pages/AcceptInvite';
+import WorkOrders from './pages/WorkOrders';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children, requiredRole }) {
@@ -29,7 +30,7 @@ function PrivateRoute({ children, requiredRole }) {
   }
 
   if (requiredRole && user.role !== requiredRole && !['admin', 'billing'].includes(user.role)) {
-    return <Navigate to="/dashboard" />;
+    return <Navigate to={user.role === 'field' ? '/work-orders' : '/dashboard'} />;
   }
 
   return children;
@@ -38,7 +39,15 @@ function PrivateRoute({ children, requiredRole }) {
 function DefaultRedirect() {
   const { user } = useAuth();
   if (user?.role === 'billing') return <Navigate to="/billing" replace />;
+  if (user?.role === 'field')   return <Navigate to="/work-orders" replace />;
   return <Navigate to="/dashboard" replace />;
+}
+
+// Blocks field-role users from accessing any route except /work-orders
+function NotField({ children }) {
+  const { user } = useAuth();
+  if (user?.role === 'field') return <Navigate to="/work-orders" replace />;
+  return children;
 }
 
 function App() {
@@ -52,15 +61,16 @@ function App() {
 
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<DefaultRedirect />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="usage" element={<Usage />} />
-            <Route path="forecasts" element={<Forecasts />} />
-            <Route path="bills" element={<Bills />} />
-            <Route path="billing" element={<BillingDashboard />} />
-            <Route path="pay" element={<Pay />} />
-            <Route path="inbox" element={<Inbox />} />
-            <Route path="alerts" element={<PrivateRoute requiredRole="admin"><Alerts /></PrivateRoute>} />
-            <Route path="admin" element={<PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute>} />
+            <Route path="dashboard" element={<NotField><Dashboard /></NotField>} />
+            <Route path="usage" element={<NotField><Usage /></NotField>} />
+            <Route path="forecasts" element={<NotField><Forecasts /></NotField>} />
+            <Route path="bills" element={<NotField><Bills /></NotField>} />
+            <Route path="billing" element={<NotField><BillingDashboard /></NotField>} />
+            <Route path="pay" element={<NotField><Pay /></NotField>} />
+            <Route path="inbox" element={<NotField><Inbox /></NotField>} />
+            <Route path="alerts" element={<NotField><PrivateRoute requiredRole="admin"><Alerts /></PrivateRoute></NotField>} />
+            <Route path="admin" element={<NotField><PrivateRoute requiredRole="admin"><AdminDashboard /></PrivateRoute></NotField>} />
+            <Route path="work-orders" element={<WorkOrders />} />
           </Route>
         </Routes>
       </Router>
