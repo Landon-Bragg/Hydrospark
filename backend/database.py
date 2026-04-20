@@ -196,6 +196,10 @@ class AnomalyAlert(db.Model):
     notes = db.Column(db.Text, nullable=True)
     bill_adjustment_amount = db.Column(db.Numeric(10, 2), nullable=True)
     completion_notes = db.Column(db.Text, nullable=True)
+    # Checkout fields
+    checked_out_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    checked_out_at = db.Column(db.DateTime, nullable=True)
+    checked_out_by_user = db.relationship('User', foreign_keys=[checked_out_by])
 
     def to_dict(self):
         return {
@@ -216,6 +220,8 @@ class AnomalyAlert(db.Model):
             'bill_adjustment_amount': float(self.bill_adjustment_amount) if self.bill_adjustment_amount else None,
             'completion_notes': self.completion_notes,
             'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'checked_out_by': self.checked_out_by,
+            'checked_out_at': self.checked_out_at.isoformat() if self.checked_out_at else None,
         }
 
 # Usage Forecast Model

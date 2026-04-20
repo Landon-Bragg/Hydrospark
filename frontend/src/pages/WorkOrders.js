@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { getWorkOrders, completeWorkOrder } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { getWorkOrders, completeWorkOrder, checkoutWorkOrder, releaseWorkOrder } from '../services/api';
 
 const DEFAULT_RATE = 5.72;
 
@@ -72,7 +73,6 @@ function CompleteModal({ order, onClose, onSuccess }) {
           Mark this job as done. Billing will be notified automatically.
         </p>
 
-        {/* Order summary */}
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px',
                       padding: '12px 16px', marginBottom: '20px' }}>
           <p style={{ fontWeight: 700, fontSize: '14px', color: '#111', margin: '0 0 4px' }}>
@@ -138,10 +138,12 @@ function CompleteModal({ order, onClose, onSuccess }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 function WorkOrders() {
-  const [tab, setTab]               = useState('open');   // open | completed
+  const { user } = useAuth();
+  const [tab, setTab]               = useState('open');
   const [orders, setOrders]         = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [completing, setCompleting] = useState(null);     // order being completed
+  const [completing, setCompleting] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null); // order id being checked out/released
 
   const load = async (status = tab) => {
     setLoading(true);
@@ -157,8 +159,31 @@ function WorkOrders() {
 
   useEffect(() => { load(tab); }, [tab]); // eslint-disable-line
 
-  const openCount     = tab === 'open'      ? orders.length : null;
-  const completedCount = tab === 'completed' ? orders.length : null;
+  const handleCheckout = async (order) => {
+    setActionLoading(order.id);
+    try {
+      await checkoutWorkOrder(order.id);
+      await load(tab);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not check out work order');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRelease = async (order) => {
+    setActionLoading(order.id);
+    try {
+      await releaseWorkOrder(order.id);
+      await load(tab);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not release work order');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openCount = tab === 'open' ? orders.length : null;
 
   return (
     <div>
@@ -169,7 +194,7 @@ function WorkOrders() {
             Work Orders
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Dispatched field investigations
+            Dispatched field investigations — check out a job before starting
           </p>
         </div>
         <button onClick={() => load(tab)}
@@ -224,19 +249,33 @@ function WorkOrders() {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
-            const diff   = parseFloat(order.usage_ccf) - parseFloat(order.expected_usage_ccf);
-            const pct    = parseFloat(order.deviation_percentage);
-            const impact = diff * DEFAULT_RATE;
+            const diff      = parseFloat(order.usage_ccf) - parseFloat(order.expected_usage_ccf);
+            const pct       = parseFloat(order.deviation_percentage);
+            const impact    = diff * DEFAULT_RATE;
+            const isActing  = actionLoading === order.id;
+
+            // Checkout state
+            const myId         = user?.id;
+            const checkedOutBy = order.checked_out_by;
+            const isCheckedOutByMe     = checkedOutBy === myId;
+            const isCheckedOutByOther  = checkedOutBy && checkedOutBy !== myId;
+
+            const borderColor = tab === 'completed' ? '#10b981'
+              : isCheckedOutByMe    ? '#2563eb'
+              : isCheckedOutByOther ? '#9ca3af'
+              : '#ef4444';
 
             return (
               <div key={order.id}
-                style={{ background: '#fff', border: '1px solid #e5e7eb',
-                         borderLeft: `4px solid ${tab === 'open' ? '#ef4444' : '#10b981'}`,
+                style={{ background: isCheckedOutByOther ? '#f9fafb' : '#fff',
+                         border: '1px solid #e5e7eb',
+                         borderLeft: `4px solid ${borderColor}`,
                          borderRadius: '10px', overflow: 'hidden',
-                         boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+                         boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+                         opacity: isCheckedOutByOther ? 0.8 : 1 }}>
                 <div style={{ padding: '18px 20px' }}>
 
-                  {/* ── Top row: customer + status ── */}
+                  {/* ── Top row: customer + status/actions ── */}
                   <div style={{ display: 'flex', justifyContent: 'space-between',
                                 alignItems: 'flex-start', gap: '16px', marginBottom: '14px' }}>
                     <div>
@@ -264,29 +303,79 @@ function WorkOrders() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-                      {tab === 'open' ? (
-                        <span style={{ padding: '3px 10px', background: '#fef9c3', color: '#713f12',
-                                       border: '1px solid #fde68a', borderRadius: '20px',
-                                       fontSize: '11px', fontWeight: 700 }}>
-                          OPEN
-                        </span>
-                      ) : (
+                      {/* Status badge */}
+                      {tab === 'completed' ? (
                         <span style={{ padding: '3px 10px', background: '#d1fae5', color: '#065f46',
                                        border: '1px solid #a7f3d0', borderRadius: '20px',
                                        fontSize: '11px', fontWeight: 700 }}>
                           COMPLETED
                         </span>
+                      ) : isCheckedOutByMe ? (
+                        <span style={{ padding: '3px 10px', background: '#dbeafe', color: '#1d4ed8',
+                                       border: '1px solid #bfdbfe', borderRadius: '20px',
+                                       fontSize: '11px', fontWeight: 700 }}>
+                          ✔ CHECKED OUT BY YOU
+                        </span>
+                      ) : isCheckedOutByOther ? (
+                        <span style={{ padding: '3px 10px', background: '#f3f4f6', color: '#6b7280',
+                                       border: '1px solid #e5e7eb', borderRadius: '20px',
+                                       fontSize: '11px', fontWeight: 700 }}>
+                          🔒 {order.checked_out_by_name || 'Someone'}
+                        </span>
+                      ) : (
+                        <span style={{ padding: '3px 10px', background: '#fef9c3', color: '#713f12',
+                                       border: '1px solid #fde68a', borderRadius: '20px',
+                                       fontSize: '11px', fontWeight: 700 }}>
+                          AVAILABLE
+                        </span>
                       )}
+
+                      {/* Action buttons — open tab only */}
                       {tab === 'open' && (
-                        <button onClick={() => setCompleting(order)}
-                          style={{ padding: '7px 16px', fontSize: '13px', fontWeight: 700,
-                                   border: 'none', borderRadius: '7px', cursor: 'pointer',
-                                   background: '#059669', color: '#fff' }}>
-                          Complete Job
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {isCheckedOutByMe ? (
+                            <>
+                              <button
+                                onClick={() => handleRelease(order)}
+                                disabled={isActing}
+                                style={{ padding: '7px 12px', fontSize: '12px', fontWeight: 600,
+                                         border: '1px solid #d1d5db', borderRadius: '7px', cursor: 'pointer',
+                                         background: '#fff', color: '#6b7280' }}>
+                                {isActing ? '…' : 'Release'}
+                              </button>
+                              <button
+                                onClick={() => setCompleting(order)}
+                                style={{ padding: '7px 16px', fontSize: '13px', fontWeight: 700,
+                                         border: 'none', borderRadius: '7px', cursor: 'pointer',
+                                         background: '#059669', color: '#fff' }}>
+                                Complete Job
+                              </button>
+                            </>
+                          ) : isCheckedOutByOther ? (
+                            <span style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic', paddingTop: '6px' }}>
+                              In progress by {order.checked_out_by_name || 'another tech'}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleCheckout(order)}
+                              disabled={isActing}
+                              style={{ padding: '7px 16px', fontSize: '13px', fontWeight: 700,
+                                       border: 'none', borderRadius: '7px', cursor: 'pointer',
+                                       background: isActing ? '#93c5fd' : '#0A4C78', color: '#fff' }}>
+                              {isActing ? 'Checking out…' : 'Check Out'}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {/* ── Checkout time (if me) ── */}
+                  {isCheckedOutByMe && order.checked_out_at && (
+                    <div style={{ marginBottom: '10px', fontSize: '12px', color: '#2563eb' }}>
+                      Checked out: {fmtDateTime(order.checked_out_at)}
+                    </div>
+                  )}
 
                   {/* ── Metrics grid ── */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', fontSize: '13px',
@@ -333,7 +422,7 @@ function WorkOrders() {
                     </div>
                   )}
 
-                  {/* ── Completion notes (completed tab) ── */}
+                  {/* ── Completion notes ── */}
                   {order.completion_notes && (
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280',

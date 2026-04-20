@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { importData, getAdminCharges, setCustomerRate, updateCustomer, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater, detectAnomalies, generateHistoricalBills } from '../services/api';
+import { importData, getAdminCharges, setCustomerRate, updateCustomer, getZipRates, createZipRate, updateZipRate, deleteZipRate, getZipAnalytics, createUser, adminSearchBills, updateBill, getDelinquent, shutoffWater, restoreWater, detectAnomalies, generateHistoricalBills, getFieldThroughput } from '../services/api';
 
 const TABS = [
   { key: 'tools',     label: 'Tools' },
   { key: 'customers', label: 'Customers' },
   { key: 'bills',     label: 'Bills' },
   { key: 'rates',     label: 'Rates' },
+  { key: 'field',     label: 'Field Team' },
 ];
 
 function AdminDashboard() {
@@ -64,6 +65,10 @@ function AdminDashboard() {
   const [billSaving, setBillSaving] = useState(false);
   const [billError, setBillError] = useState(null);
 
+  // ── Field Team ────────────────────────────────────────────────────────────────
+  const [fieldWorkers, setFieldWorkers] = useState([]);
+  const [fieldLoading, setFieldLoading] = useState(false);
+
   // ── Rates ────────────────────────────────────────────────────────────────────
   const [zipRates, setZipRates] = useState([]);
   const [zipRatesLoading, setZipRatesLoading] = useState(false);
@@ -94,6 +99,14 @@ function AdminDashboard() {
         setChargesLoading(false);
         setDelinquentLoading(false);
       });
+    }
+
+    if (activeTab === 'field') {
+      setFieldLoading(true);
+      getFieldThroughput()
+        .then(r => setFieldWorkers(r.data.workers || []))
+        .catch(() => {})
+        .finally(() => setFieldLoading(false));
     }
 
     if (activeTab === 'rates') {
@@ -923,6 +936,164 @@ function AdminDashboard() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
+          FIELD TEAM TAB
+      ═══════════════════════════════════════════════════════════════ */}
+      {activeTab === 'field' && (
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-hydro-deep-aqua">Field Team Throughput</h2>
+              <p className="text-sm text-gray-400 mt-0.5">Work order activity per field technician</p>
+            </div>
+            <button
+              onClick={() => {
+                loadedTabs.current.delete('field');
+                setFieldLoading(true);
+                getFieldThroughput()
+                  .then(r => setFieldWorkers(r.data.workers || []))
+                  .catch(() => {})
+                  .finally(() => setFieldLoading(false));
+              }}
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {fieldLoading ? (
+            <div className="flex justify-center py-16"><div className="hydro-spinner" /></div>
+          ) : fieldWorkers.length === 0 ? (
+            <div className="card text-center py-12">
+              <p className="text-4xl mb-3">👷</p>
+              <p className="text-lg font-semibold text-gray-600">No field technicians found</p>
+              <p className="text-sm text-gray-400 mt-1">Add field accounts via Invite User to track throughput.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Summary row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="card" style={{ borderLeft: '4px solid #0A4C78' }}>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Technicians</p>
+                  <p className="text-2xl font-bold text-hydro-deep-aqua">{fieldWorkers.length}</p>
+                </div>
+                <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Active Jobs</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {fieldWorkers.reduce((s, w) => s + w.checked_out, 0)}
+                  </p>
+                </div>
+                <div className="card" style={{ borderLeft: '4px solid #10b981' }}>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Completed</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {fieldWorkers.reduce((s, w) => s + w.completed, 0)}
+                  </p>
+                </div>
+                <div className="card" style={{ borderLeft: '4px solid #f59e0b' }}>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Avg Completion</p>
+                  <p className="text-2xl font-bold text-amber-600">
+                    {(() => {
+                      const valid = fieldWorkers.filter(w => w.avg_hours != null);
+                      if (!valid.length) return '—';
+                      const avg = valid.reduce((s, w) => s + w.avg_hours, 0) / valid.length;
+                      return avg < 1 ? `${Math.round(avg * 60)}m` : `${avg.toFixed(1)}h`;
+                    })()}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-0.5">dispatch → done</p>
+                </div>
+              </div>
+
+              {/* Per-worker cards */}
+              {fieldWorkers.map(worker => (
+                <div key={worker.user_id} className="card">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                        style={{ background: '#0A4C78' }}>
+                        {worker.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-800">{worker.name}</p>
+                        <p className="text-xs text-gray-400">{worker.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 text-center">
+                      <div>
+                        <p className="text-xl font-bold text-blue-600">{worker.checked_out}</p>
+                        <p className="text-xs text-gray-400">Active</p>
+                      </div>
+                      <div className="w-px bg-gray-100" />
+                      <div>
+                        <p className="text-xl font-bold text-green-600">{worker.completed}</p>
+                        <p className="text-xs text-gray-400">Completed</p>
+                      </div>
+                      <div className="w-px bg-gray-100" />
+                      <div>
+                        <p className="text-xl font-bold text-amber-600">
+                          {worker.avg_hours == null ? '—'
+                            : worker.avg_hours < 1 ? `${Math.round(worker.avg_hours * 60)}m`
+                            : `${worker.avg_hours.toFixed(1)}h`}
+                        </p>
+                        <p className="text-xs text-gray-400">Avg time</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {worker.active.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Currently Checked Out</p>
+                      <div className="space-y-1">
+                        {worker.active.map(job => (
+                          <div key={job.id} className="flex items-center justify-between text-sm px-3 py-2 rounded-lg"
+                            style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+                            <span className="font-medium text-blue-800">{job.customer_name || 'Unknown'}</span>
+                            <span className="text-xs text-blue-500">
+                              Alert: {job.alert_date} &middot; Out since: {job.checked_out_at ? new Date(job.checked_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {worker.recent.length > 0 ? (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Recent Completions</p>
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Customer</th>
+                            <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">CCF Over</th>
+                            <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Completed</th>
+                            <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-500">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {worker.recent.map(job => (
+                            <tr key={job.id} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 font-medium">{job.customer_name || '—'}</td>
+                              <td className="px-3 py-2 text-red-600 font-semibold">+{job.ccf_over.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                                {job.resolved_at ? new Date(job.resolved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-gray-400 italic text-xs">
+                                {job.completion_notes ? `"${job.completion_notes}"` : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No completed jobs yet.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
           EDIT CUSTOMER MODAL (portal)
       ═══════════════════════════════════════════════════════════════ */}
       {editingCustomer && createPortal(
@@ -962,7 +1133,17 @@ function AdminDashboard() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Location ID</label>
-                    <input type="text" value={editForm.location_id} onChange={e => setEditForm(f => ({ ...f, location_id: e.target.value }))} className="input-field" />
+                    <input
+                      type="text"
+                      value={editForm.location_id}
+                      onChange={e => setEditForm(f => ({ ...f, location_id: e.target.value.replace(/\D/g, '').slice(0, 9) }))}
+                      maxLength={9}
+                      className={`input-field ${editForm.location_id && editForm.location_id.length !== 9 ? 'border-red-400' : ''}`}
+                      placeholder="9-digit number"
+                    />
+                    {editForm.location_id && editForm.location_id.length !== 9 && (
+                      <p className="text-xs text-red-500 mt-1">Must be exactly 9 digits</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Cycle Number</label>
@@ -1031,7 +1212,7 @@ function AdminDashboard() {
               </button>
               <button
                 onClick={handleEditSave}
-                disabled={editSaving || !editForm.customer_name.trim()}
+                disabled={editSaving || !editForm.customer_name.trim() || (editForm.location_id && editForm.location_id.length !== 9)}
                 className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
                 style={{ background: '#0A4C78' }}
                 onMouseEnter={e => { if (!editSaving) e.currentTarget.style.opacity = '0.85'; }}

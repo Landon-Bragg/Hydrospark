@@ -4,6 +4,7 @@ Anomaly detection and alerts routes
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func
 from database import db, User, Customer, AnomalyAlert, Bill, Notification, AuditLog
 from services.ml_service import MLService
 from datetime import datetime
@@ -76,6 +77,10 @@ def get_alerts():
             query = query.order_by(AnomalyAlert.risk_score.desc())
         elif sort == 'risk_asc':
             query = query.order_by(AnomalyAlert.risk_score.asc())
+        elif sort == 'ccf_desc':
+            query = query.order_by(
+                (AnomalyAlert.usage_ccf - AnomalyAlert.expected_usage_ccf).desc()
+            )
         else:
             query = query.order_by(AnomalyAlert.alert_date.desc())
 
@@ -245,6 +250,110 @@ def resolve_alert(alert_id):
         return jsonify({'error': str(e)}), 500
 
 
+@alerts_bp.route('/leaderboard', methods=['GET'])
+@jwt_required()
+def get_anomaly_leaderboard():
+    """Return customers ranked by active spike count."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        limit = request.args.get('limit', 10, type=int)
+        status_filter = request.args.get('status', 'active')  # active | all | new | acknowledged | resolved
+
+        q = (db.session.query(
+                Customer.id.label('customer_id'),
+                Customer.customer_name,
+                Customer.customer_type,
+                Customer.location_id,
+                func.count(AnomalyAlert.id).label('spike_count'),
+                func.sum(AnomalyAlert.usage_ccf - AnomalyAlert.expected_usage_ccf).label('total_ccf_over'),
+             )
+             .join(AnomalyAlert, AnomalyAlert.customer_id == Customer.id)
+             .filter(AnomalyAlert.alert_type == 'spike'))
+
+        if status_filter == 'active':
+            q = q.filter(AnomalyAlert.status.in_(['new', 'acknowledged']))
+        elif status_filter in ('new', 'acknowledged', 'resolved'):
+            q = q.filter(AnomalyAlert.status == status_filter)
+
+        results = (q
+                   .group_by(Customer.id, Customer.customer_name, Customer.customer_type, Customer.location_id)
+                   .order_by(func.count(AnomalyAlert.id).desc())
+                   .limit(limit)
+                   .all())
+
+        return jsonify({'leaderboard': [{
+            'customer_id':    r.customer_id,
+            'customer_name':  r.customer_name,
+            'customer_type':  r.customer_type,
+            'location_id':    r.location_id,
+            'spike_count':    r.spike_count,
+            'total_ccf_over': float(r.total_ccf_over or 0),
+        } for r in results]}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@alerts_bp.route('/<int:alert_id>/checkout', methods=['POST'])
+@jwt_required()
+def checkout_work_order(alert_id):
+    """Field worker claims a work order."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing', 'field']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
+        if not alert:
+            return jsonify({'error': 'Work order not found'}), 404
+        if alert.action_taken != 'dispatch':
+            return jsonify({'error': 'Not a dispatched work order'}), 400
+        if alert.status == 'resolved':
+            return jsonify({'error': 'Work order already completed'}), 409
+        if alert.checked_out_by and alert.checked_out_by != user_id:
+            checker = User.query.get(alert.checked_out_by)
+            name = f"{checker.first_name or ''} {checker.last_name or ''}".strip() or checker.email
+            return jsonify({'error': f'Already checked out by {name}'}), 409
+
+        alert.checked_out_by = user_id
+        alert.checked_out_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'message': 'Checked out', 'alert': _alert_dict(alert)}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@alerts_bp.route('/<int:alert_id>/release', methods=['POST'])
+@jwt_required()
+def release_work_order(alert_id):
+    """Release a checked-out work order."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user.role not in ['admin', 'billing', 'field']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        alert = db.session.query(AnomalyAlert).with_for_update().get(alert_id)
+        if not alert:
+            return jsonify({'error': 'Work order not found'}), 404
+        if alert.checked_out_by != user_id and user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'You did not check this out'}), 403
+
+        alert.checked_out_by = None
+        alert.checked_out_at = None
+        db.session.commit()
+        return jsonify({'message': 'Released', 'alert': _alert_dict(alert)}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 def _alert_dict(alert):
     """Serialize alert with customer info."""
     d = alert.to_dict()
@@ -255,12 +364,20 @@ def _alert_dict(alert):
         d['location_id']    = alert.customer.location_id
         d['customer_type']  = alert.customer.customer_type
         d['zip_code']       = alert.customer.zip_code
+        d['mailing_address'] = alert.customer.mailing_address
     else:
         d['customer_name']  = None
         d['customer_email'] = None
         d['location_id']    = None
         d['customer_type']  = None
         d['zip_code']       = None
+        d['mailing_address'] = None
+    # Checkout info
+    if alert.checked_out_by_user:
+        u = alert.checked_out_by_user
+        d['checked_out_by_name'] = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email
+    else:
+        d['checked_out_by_name'] = None
     return d
 
 

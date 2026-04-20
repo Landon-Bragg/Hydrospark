@@ -59,6 +59,10 @@ export const dispatchAlert = (id, data) => api.post(`/alerts/${id}/dispatch`, da
 export const applyBillAdjustment = (id, data) => api.post(`/alerts/${id}/adjust-bill`, data);
 export const getWorkOrders = (params) => api.get('/alerts/work-orders', { params });
 export const completeWorkOrder = (id, data) => api.post(`/alerts/${id}/complete`, data);
+export const checkoutWorkOrder = (id) => api.post(`/alerts/${id}/checkout`);
+export const releaseWorkOrder = (id) => api.post(`/alerts/${id}/release`);
+export const getAnomalyLeaderboard = (params) => api.get('/alerts/leaderboard', { params });
+export const getFieldThroughput = () => api.get('/admin/field-throughput');
 
 // Admin
 export const getUsers = () => api.get('/admin/users');
