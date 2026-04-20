@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getUsageSummary, getUsage, getAlerts, getForecasts,
   getZipAverages, getAdminStats, getWeatherForecast, getBills,
+  getBillingStats, getWorkOrders,
 } from '../services/api';
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -15,6 +16,7 @@ function Dashboard() {
   const [forecasts, setForecasts] = useState([]);
   const [zipAverages, setZipAverages] = useState(null);
   const [adminStats, setAdminStats] = useState(null);
+  const [billingSnapshot, setBillingSnapshot] = useState(null); // { billingStats, alertCounts, openWorkOrders }
   const [weather, setWeather] = useState(null);
   const [unpaidBills, setUnpaidBills] = useState([]);
   const [monthlyTrend, setMonthlyTrend] = useState([]);
@@ -73,8 +75,18 @@ function Dashboard() {
         setSummary(null);
         setAlerts([]);
         setForecasts([]);
-        const statsRes = await getAdminStats().catch(() => ({ data: {} }));
+        const [statsRes, billingRes, alertsRes, ordersRes] = await Promise.all([
+          getAdminStats().catch(() => ({ data: {} })),
+          getBillingStats().catch(() => ({ data: null })),
+          getAlerts({ per_page: 1 }).catch(() => ({ data: { counts: { new: 0, acknowledged: 0, resolved: 0 } } })),
+          getWorkOrders({ status: 'open' }).catch(() => ({ data: { work_orders: [] } })),
+        ]);
         setAdminStats(statsRes.data);
+        setBillingSnapshot({
+          billingStats: billingRes.data,
+          alertCounts: alertsRes.data.counts || { new: 0, acknowledged: 0 },
+          openWorkOrders: (ordersRes.data.work_orders || []).length,
+        });
       }
     } catch (err) {
       setError('Failed to load dashboard data');
@@ -92,66 +104,137 @@ function Dashboard() {
 
   // ── Admin/Billing Dashboard ────────────────────────────────────────────────
   if (user?.role === 'admin' || user?.role === 'billing') {
+    const bs = billingSnapshot;
+    const overdue  = bs?.billingStats?.overdue  || { count: 0, total: 0 };
+    const outstanding = bs?.billingStats?.outstanding || { count: 0, total: 0 };
+    const newAlerts = bs?.alertCounts?.new || 0;
+    const ackAlerts = bs?.alertCounts?.acknowledged || 0;
+    const openOrders = bs?.openWorkOrders || 0;
+
     return (
       <div>
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>Admin Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">System overview and quick actions</p>
+          <h1 className="text-3xl font-bold text-hydro-deep-aqua" style={{ letterSpacing: '-0.03em' }}>
+            {user?.role === 'billing' ? 'Billing Dashboard' : 'Admin Dashboard'}
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {user?.role === 'billing' ? 'Live snapshot of accounts needing attention' : 'System overview and quick actions'}
+          </p>
         </div>
 
+        {/* Billing-focused stat cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="card bg-gradient-to-br from-hydro-spark-blue to-hydro-deep-aqua text-white">
-            <h3 className="text-lg font-semibold mb-2">Total Records</h3>
-            <p className="text-3xl font-bold">
-              {adminStats?.record_count != null ? adminStats.record_count.toLocaleString() : '—'}
-            </p>
-            <p className="text-sm mt-2">Water usage records imported</p>
+          <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Overdue Bills</p>
+            <p className="text-3xl font-bold text-red-600">${parseFloat(overdue.total || 0).toFixed(0)}</p>
+            <p className="text-sm text-gray-500 mt-1">{overdue.count} account{overdue.count !== 1 ? 's' : ''} past due</p>
           </div>
-          <div className="card bg-gradient-to-br from-hydro-green to-green-600 text-white">
-            <h3 className="text-lg font-semibold mb-2">Total Accounts</h3>
-            <p className="text-3xl font-bold">
-              {adminStats?.customer_count != null ? adminStats.customer_count.toLocaleString() : '—'}
-            </p>
-            <p className="text-sm mt-2">Unique location accounts</p>
+          <div className="card" style={{ borderLeft: '4px solid #f59e0b' }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Outstanding</p>
+            <p className="text-3xl font-bold text-amber-600">${parseFloat(outstanding.total || 0).toFixed(0)}</p>
+            <p className="text-sm text-gray-500 mt-1">{outstanding.count} pending or sent</p>
           </div>
-          <div className="card bg-gradient-to-br from-teal-500 to-teal-600 text-white">
-            <h3 className="text-lg font-semibold mb-2">Unique Customers</h3>
-            <p className="text-3xl font-bold">
-              {adminStats?.unique_customer_names != null ? adminStats.unique_customer_names.toLocaleString() : '—'}
-            </p>
-            <p className="text-sm mt-2">Distinct customer names</p>
+          <div className="card" style={{ borderLeft: '4px solid #dc2626' }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Active Anomalies</p>
+            <p className="text-3xl font-bold text-red-700">{newAlerts + ackAlerts}</p>
+            <p className="text-sm text-gray-500 mt-1">{newAlerts} new · {ackAlerts} acknowledged</p>
           </div>
-          <div className="card bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-            <h3 className="text-lg font-semibold mb-2">Date Range</h3>
-            <p className="text-xl font-bold">
-              {adminStats?.min_year && adminStats?.max_year
-                ? `${adminStats.min_year} – ${adminStats.max_year}` : '—'}
-            </p>
-            <p className="text-sm mt-2">
-              {adminStats?.min_year && adminStats?.max_year
-                ? `${adminStats.max_year - adminStats.min_year + 1} years of data`
-                : 'Years of data'}
-            </p>
+          <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Open Work Orders</p>
+            <p className="text-3xl font-bold text-blue-600">{openOrders}</p>
+            <p className="text-sm text-gray-500 mt-1">field jobs dispatched &amp; pending</p>
           </div>
         </div>
 
-        <div className="card">
-          <h2 className="text-xl font-bold text-hydro-deep-aqua mb-4">System Status</h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-              <span className="font-semibold">Database</span>
-              <span className="text-green-600">✓ Connected</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-              <span className="font-semibold">API</span>
-              <span className="text-green-600">✓ Running</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-green-50 rounded">
-              <span className="font-semibold">ML Models</span>
-              <span className="text-green-600">✓ Ready</span>
+        {/* Pressing items panel */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Overdue breakdown */}
+          <div className="card">
+            <h2 className="text-lg font-bold text-hydro-deep-aqua mb-1">Overdue Accounts</h2>
+            <p className="text-xs text-gray-400 mb-4">Bills past due date — highest amount first</p>
+            {overdue.count === 0 ? (
+              <p className="text-sm text-gray-400 italic py-4 text-center">No overdue bills right now.</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center p-3 rounded-lg bg-red-50 border border-red-100">
+                  <span className="text-sm font-semibold text-red-800">{overdue.count} overdue account{overdue.count !== 1 ? 's' : ''}</span>
+                  <span className="text-sm font-bold text-red-700">${parseFloat(overdue.total).toFixed(2)} total</span>
+                </div>
+                <p className="text-xs text-gray-400 pt-1">
+                  Go to <a href="/billing" className="text-hydro-deep-aqua underline font-medium">Billing</a> → filter by Overdue to manage these accounts.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Anomaly + work order summary */}
+          <div className="card">
+            <h2 className="text-lg font-bold text-hydro-deep-aqua mb-1">Attention Required</h2>
+            <p className="text-xs text-gray-400 mb-4">Alerts and field jobs needing action</p>
+            <div className="space-y-2">
+              {newAlerts > 0 ? (
+                <div className="flex justify-between items-center p-3 rounded-lg bg-red-50 border border-red-100">
+                  <span className="text-sm font-semibold text-red-800">⚡ {newAlerts} new spike alert{newAlerts !== 1 ? 's' : ''}</span>
+                  <a href="/alerts" className="text-xs font-semibold text-red-600 underline">Review →</a>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center p-3 rounded-lg bg-green-50 border border-green-100">
+                  <span className="text-sm text-green-700">No new alerts</span>
+                </div>
+              )}
+              {ackAlerts > 0 && (
+                <div className="flex justify-between items-center p-3 rounded-lg bg-amber-50 border border-amber-100">
+                  <span className="text-sm font-semibold text-amber-800">⏳ {ackAlerts} alert{ackAlerts !== 1 ? 's' : ''} acknowledged, not resolved</span>
+                  <a href="/alerts" className="text-xs font-semibold text-amber-600 underline">View →</a>
+                </div>
+              )}
+              {openOrders > 0 ? (
+                <div className="flex justify-between items-center p-3 rounded-lg bg-blue-50 border border-blue-100">
+                  <span className="text-sm font-semibold text-blue-800">🔧 {openOrders} work order{openOrders !== 1 ? 's' : ''} in field</span>
+                  <a href="/alerts" className="text-xs font-semibold text-blue-600 underline">Track →</a>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center p-3 rounded-lg bg-green-50 border border-green-100">
+                  <span className="text-sm text-green-700">No open work orders</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Admin-only: system stats */}
+        {user?.role === 'admin' && (
+          <div className="card mt-6">
+            <h2 className="text-lg font-bold text-hydro-deep-aqua mb-4">Dataset</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Records</p>
+                <p className="text-2xl font-bold text-hydro-deep-aqua">
+                  {adminStats?.record_count != null ? adminStats.record_count.toLocaleString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Accounts</p>
+                <p className="text-2xl font-bold text-hydro-deep-aqua">
+                  {adminStats?.customer_count != null ? adminStats.customer_count.toLocaleString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Customers</p>
+                <p className="text-2xl font-bold text-hydro-deep-aqua">
+                  {adminStats?.unique_customer_names != null ? adminStats.unique_customer_names.toLocaleString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Date Range</p>
+                <p className="text-2xl font-bold text-hydro-deep-aqua">
+                  {adminStats?.min_year && adminStats?.max_year
+                    ? `${adminStats.min_year}–${adminStats.max_year}` : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

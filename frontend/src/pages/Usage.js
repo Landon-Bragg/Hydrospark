@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsage, getUsageSummary, getTopCustomers, getAdminCharges, adminSearchBills, updateBill, downloadUsage } from '../services/api';
 import {
@@ -105,7 +106,7 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
         date: date.slice(5),
         fullDate: date,
         usage: parseFloat(val.toFixed(2)),
-        color: val > avgDaily * 1.5 ? '#ef4444' : val > avgDaily * 1.3 ? '#f59e0b' : '#0ea5e9',
+        color: val > avgDaily * 1.6 ? '#ef4444' : val > avgDaily * 1.3 ? '#f59e0b' : '#0ea5e9',
       }));
   }, [usage, avgDaily]);
 
@@ -123,9 +124,19 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
             {customer.customer_type}
           </span>
         )}
-        <button onClick={onClear} className="ml-auto text-xs text-red-500 hover:underline">
-          Clear
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {canEditBills && (
+            <Link
+              to="/billing"
+              className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 transition font-medium"
+            >
+              Manage in Billing →
+            </Link>
+          )}
+          <button onClick={onClear} className="text-xs text-red-500 hover:underline">
+            Clear
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -169,8 +180,8 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
           </ResponsiveContainer>
           <div className="flex gap-4 text-xs text-gray-500 mt-2">
             <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500 mr-1" />Normal</span>
-            <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1" />30–50% above average</span>
-            <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1" />50%+ above average</span>
+            <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1" />30–60% above average</span>
+            <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1" />60%+ above average</span>
           </div>
         </div>
       )}
@@ -223,7 +234,7 @@ function CustomerDetail({ customer, dateRange, onClear, canEditBills, onEditBill
                       <td className="px-4 py-1.5">{r.usage_date}</td>
                       <td className="px-4 py-1.5 font-semibold">{val.toFixed(2)}</td>
                       <td className="px-4 py-1.5">
-                        <span className={`text-xs font-semibold ${diff > 50 ? 'text-red-600' : diff > 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                        <span className={`text-xs font-semibold ${diff > 60 ? 'text-red-600' : diff > 30 ? 'text-amber-600' : 'text-green-600'}`}>
                           {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
                         </span>
                       </td>
@@ -342,6 +353,7 @@ function Usage() {
   // Top customers chart filters
   const [topTypeFilter, setTopTypeFilter] = useState('');        // '' | 'Residential' | 'Municipal' | 'Commercial'
   const [topLimit, setTopLimit] = useState(15);                  // 15 | 25 | 50 | 0 = all
+  const [topSortDir, setTopSortDir] = useState('desc');          // 'desc' = highest, 'asc' = lowest
 
   // Download modal state
   const [showDownload, setShowDownload] = useState(false);
@@ -480,6 +492,8 @@ function Usage() {
     let filtered = topTypeFilter
       ? topCustomers.filter(c => c.customer_type === topTypeFilter)
       : topCustomers;
+    // API returns desc by usage; for lowest, reverse before slicing
+    if (topSortDir === 'asc') filtered = [...filtered].reverse();
     if (topLimit > 0) filtered = filtered.slice(0, topLimit);
     return filtered.map(c => ({
       name: c.customer_name.length > 22 ? c.customer_name.slice(0, 20) + '…' : c.customer_name,
@@ -487,7 +501,7 @@ function Usage() {
       usage: parseFloat(c.total_usage_ccf.toFixed(2)),
       type: c.customer_type,
     }));
-  }, [topCustomers, topTypeFilter, topLimit]);
+  }, [topCustomers, topTypeFilter, topLimit, topSortDir]);
 
   const myDailyChart = useMemo(() => {
     if (!myUsage.length) return [];
@@ -502,7 +516,7 @@ function Usage() {
         date: date.slice(5),
         fullDate: date,
         usage: parseFloat(val.toFixed(2)),
-        color: val > avg * 1.5 ? '#ef4444' : val > avg * 1.3 ? '#f59e0b' : '#0ea5e9',
+        color: val > avg * 1.6 ? '#ef4444' : val > avg * 1.3 ? '#f59e0b' : '#0ea5e9',
       }));
   }, [myUsage]);
 
@@ -563,10 +577,20 @@ function Usage() {
           <div className="card mb-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-xl font-semibold">
-                Top {topLimit === 0 ? 'All' : topLimit} Customers by Usage
+                {topSortDir === 'asc' ? 'Lowest' : 'Top'} {topLimit === 0 ? '' : topLimit} Customers by Usage
                 {topTypeFilter && <span className="text-base font-normal text-gray-400 ml-2">— {topTypeFilter}</span>}
               </h2>
               <div className="flex flex-wrap items-center gap-2">
+                {/* Sort direction */}
+                <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                  {[['desc', 'Highest'], ['asc', 'Lowest']].map(([val, label]) => (
+                    <button key={val} onClick={() => setTopSortDir(val)} className="px-2.5 py-1"
+                      style={topSortDir === val
+                        ? { background: '#0A4C78', color: '#fff' }
+                        : { background: '#fff', color: '#374151' }}
+                    >{label}</button>
+                  ))}
+                </div>
                 {/* Type filter */}
                 <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
                   {[['', 'All'], ['Residential', 'Residential'], ['Municipal', 'Municipal'], ['Commercial', 'Commercial']].map(([val, label]) => (
@@ -702,7 +726,7 @@ function Usage() {
             }
             const spikes = Object.entries(dayMap)
               .map(([date, val]) => ({ date, val }))
-              .filter(({ val }) => myAvgDaily > 0 && val > myAvgDaily * 1.5)
+              .filter(({ val }) => myAvgDaily > 0 && val > myAvgDaily * 1.6)
               .sort((a, b) => b.val - a.val);
             if (spikes.length === 0) {
               return (
@@ -780,8 +804,8 @@ function Usage() {
                 </ResponsiveContainer>
                 <div className="flex gap-4 text-xs text-gray-500 mt-2">
                   <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-sky-500 mr-1" />Normal</span>
-                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1" />30–50% above average</span>
-                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1" />50%+ above average</span>
+                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1" />30–60% above average</span>
+                  <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1" />60%+ above average</span>
                 </div>
               </>
             )}
@@ -843,7 +867,7 @@ function Usage() {
                           <td className="px-4 py-2">{record.usage_date}</td>
                           <td className="px-4 py-2 font-semibold">{val.toFixed(2)}</td>
                           <td className="px-4 py-2">
-                            <span className={`text-xs font-semibold ${diff > 50 ? 'text-red-600' : diff > 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                            <span className={`text-xs font-semibold ${diff > 60 ? 'text-red-600' : diff > 30 ? 'text-amber-600' : 'text-green-600'}`}>
                               {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
                             </span>
                           </td>

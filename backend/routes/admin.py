@@ -4,12 +4,13 @@ Admin routes - User management, data import
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from database import db, User, Customer, AuditLog, Bill, ZipCodeRate, WaterUsage
+from database import db, User, Customer, AuditLog, Bill, ZipCodeRate, WaterUsage, AnomalyAlert
 from services.data_import_service import DataImportService
 from datetime import datetime, timedelta
 from sqlalchemy import func, case
 import bcrypt
 import secrets
+import re
 
 admin_bp = Blueprint('admin', __name__)
 import_service = DataImportService()
@@ -353,10 +354,11 @@ def update_customer(customer_id):
             customer.zip_code = data['zip_code'].strip() or None
         if 'location_id' in data:
             new_loc = data['location_id'].strip()
-            # Ensure location_id uniqueness
+            if not re.fullmatch(r'\d{9}', new_loc):
+                return jsonify({'error': 'Location ID must be exactly 9 digits'}), 400
             existing = Customer.query.filter(Customer.location_id == new_loc, Customer.id != customer_id).first()
             if existing:
-                return jsonify({'error': f'Location ID "{new_loc}" is already assigned to another customer'}), 400
+                return jsonify({'error': f'Location ID "{new_loc}" is already in use by another customer'}), 400
             customer.location_id = new_loc
         if 'cycle_number' in data:
             customer.cycle_number = int(data['cycle_number']) if data['cycle_number'] not in (None, '') else None
@@ -732,5 +734,66 @@ def get_stats():
             'min_year': min_year,
             'max_year': max_year,
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/field-throughput', methods=['GET'])
+@jwt_required()
+def get_field_throughput():
+    """Per-field-worker throughput: checked out, completed, avg time."""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        field_users = User.query.filter_by(role='field', is_active=True).all()
+        result = []
+        for fu in field_users:
+            name = f"{fu.first_name or ''} {fu.last_name or ''}".strip() or fu.email
+
+            checked_out = AnomalyAlert.query.filter(
+                AnomalyAlert.checked_out_by == fu.id,
+                AnomalyAlert.status == 'acknowledged',
+            ).all()
+
+            completed = AnomalyAlert.query.filter(
+                AnomalyAlert.checked_out_by == fu.id,
+                AnomalyAlert.status == 'resolved',
+            ).order_by(AnomalyAlert.resolved_at.desc()).all()
+
+            # Average hours from dispatch to completion
+            durations = []
+            for a in completed:
+                if a.dispatched_at and a.resolved_at:
+                    durations.append((a.resolved_at - a.dispatched_at).total_seconds() / 3600)
+            avg_hours = round(sum(durations) / len(durations), 1) if durations else None
+
+            result.append({
+                'user_id':        fu.id,
+                'name':           name,
+                'email':          fu.email,
+                'checked_out':    len(checked_out),
+                'completed':      len(completed),
+                'avg_hours':      avg_hours,
+                'recent': [{
+                    'id':               a.id,
+                    'customer_name':    a.customer.customer_name if a.customer else None,
+                    'alert_date':       a.alert_date.isoformat() if a.alert_date else None,
+                    'resolved_at':      a.resolved_at.isoformat() if a.resolved_at else None,
+                    'completion_notes': a.completion_notes,
+                    'ccf_over':         float(a.usage_ccf - a.expected_usage_ccf),
+                } for a in completed[:5]],
+                'active': [{
+                    'id':            a.id,
+                    'customer_name': a.customer.customer_name if a.customer else None,
+                    'alert_date':    a.alert_date.isoformat() if a.alert_date else None,
+                    'checked_out_at': a.checked_out_at.isoformat() if a.checked_out_at else None,
+                } for a in checked_out],
+            })
+
+        result.sort(key=lambda x: x['completed'], reverse=True)
+        return jsonify({'workers': result}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
-import { getAlerts, acknowledgeAlert, resolveAlert, dispatchAlert, applyBillAdjustment, detectAnomalies } from '../services/api';
+import { getAlerts, acknowledgeAlert, resolveAlert, dispatchAlert, applyBillAdjustment, detectAnomalies, getAnomalyLeaderboard } from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_RATE = 5.72;
@@ -281,6 +281,12 @@ function Alerts() {
   const [loading,   setLoading]   = useState(true);
   const [expanded,  setExpanded]  = useState(null); // alert id for expanded detail
 
+  // Leaderboard
+  const [leaders,        setLeaders]        = useState([]);
+  const [leadersLoading, setLeadersLoading] = useState(true);
+  const [leadersStatus,  setLeadersStatus]  = useState('active');
+  const [leadersSort,    setLeadersSort]    = useState('count');
+
   // Run detection
   const [detecting,     setDetecting]     = useState(false);
   const [detectResult,  setDetectResult]  = useState(null);
@@ -322,7 +328,22 @@ function Alerts() {
     }
   };
 
-  useEffect(() => { loadAlerts(); }, []); // eslint-disable-line
+  const loadLeaderboard = async (status) => {
+    setLeadersLoading(true);
+    try {
+      const res = await getAnomalyLeaderboard({ status, limit: 10 });
+      setLeaders(res.data.leaderboard || []);
+    } catch (e) {
+      setLeaders([]);
+    } finally {
+      setLeadersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAlerts();
+    loadLeaderboard('active');
+  }, []); // eslint-disable-line
 
   // Debounce customer search
   const searchTimer = useRef(null);
@@ -336,7 +357,6 @@ function Alerts() {
   };
 
   const handleStatusFilter = (val) => { setStatusFilter(val); setPage(1); loadAlerts({ status: val, page: 1 }); };
-  const handleTypeFilter   = (val) => { setTypeFilter(val);   setPage(1); loadAlerts({ alert_type: val, page: 1 }); };
   const handleRiskFilter   = (val) => { setRiskFilter(val);   setPage(1); loadAlerts({ risk_level: val, page: 1 }); };
   const handleDateFrom     = (val) => { setDateFrom(val);     setPage(1); loadAlerts({ date_from: val, page: 1 }); };
   const handleDateTo       = (val) => { setDateTo(val);       setPage(1); loadAlerts({ date_to: val, page: 1 }); };
@@ -374,6 +394,7 @@ function Alerts() {
       const res = await detectAnomalies();
       setDetectResult({ ok: true, count: res.data.anomalies?.length ?? 0 });
       loadAlerts();
+      loadLeaderboard(leadersStatus);
     } catch (err) {
       setDetectResult({ ok: false, msg: err.response?.data?.error || 'Detection failed' });
     } finally {
@@ -464,7 +485,97 @@ function Alerts() {
         </div>
       </div>
 
-      {/* ── Type breakdown row ── */}
+      {/* ── Anomaly Leaderboard ── */}
+      {isAdmin && (
+        <div className="card mb-5">
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '14px' }}>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: '15px', color: '#0A4C78', margin: 0 }}>Anomaly Leaders</p>
+              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '2px 0 0' }}>Customers ranked by spike count</p>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                {[['active', 'Active'], ['all', 'All Time'], ['resolved', 'Resolved']].map(([val, label]) => (
+                  <button key={val}
+                    onClick={() => { setLeadersStatus(val); loadLeaderboard(val); }}
+                    style={{ padding: '3px 10px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer',
+                             background: leadersStatus === val ? '#0A4C78' : '#fff',
+                             color: leadersStatus === val ? '#fff' : '#374151' }}
+                  >{label}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                {[['count', '# Spikes'], ['ccf', 'CCF Over']].map(([val, label]) => (
+                  <button key={val}
+                    onClick={() => setLeadersSort(val)}
+                    style={{ padding: '3px 10px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer',
+                             background: leadersSort === val ? '#0A4C78' : '#fff',
+                             color: leadersSort === val ? '#fff' : '#374151' }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {leadersLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0' }}>
+              <div className="hydro-spinner" />
+            </div>
+          ) : leaders.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '13px', padding: '16px 0', margin: 0 }}>
+              No anomalies found.
+            </p>
+          ) : (() => {
+            const sorted = [...leaders].sort((a, b) =>
+              leadersSort === 'ccf' ? b.total_ccf_over - a.total_ccf_over : b.spike_count - a.spike_count
+            );
+            const maxVal = leadersSort === 'ccf'
+              ? Math.max(...sorted.map(r => r.total_ccf_over), 1)
+              : Math.max(...sorted.map(r => r.spike_count), 1);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {sorted.map((r, i) => {
+                  const val = leadersSort === 'ccf' ? r.total_ccf_over : r.spike_count;
+                  const pct = Math.max(4, Math.round((val / maxVal) * 100));
+                  const color = i === 0 ? '#dc2626' : i === 1 ? '#ea580c' : i === 2 ? '#d97706' : '#6b7280';
+                  return (
+                    <div key={r.customer_id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, width: '16px', textAlign: 'center', color, flexShrink: 0 }}>
+                        {i + 1}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
+                          <button
+                            onClick={() => { handleSearchChange(r.customer_name); }}
+                            style={{ fontWeight: 600, fontSize: '13px', color: '#0A4C78', background: 'none',
+                                     border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+                                     textDecoration: 'underline', maxWidth: '55%', overflow: 'hidden',
+                                     textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={r.customer_name}
+                          >
+                            {r.customer_name}
+                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>{r.customer_type}</span>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color }}>
+                              {leadersSort === 'ccf'
+                                ? `${r.total_ccf_over.toFixed(1)} CCF over`
+                                : `${r.spike_count} spike${r.spike_count !== 1 ? 's' : ''}`}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ width: '100%', height: '5px', background: '#f3f4f6', borderRadius: '9999px' }}>
+                          <div style={{ width: `${pct}%`, height: '5px', background: color, borderRadius: '9999px', transition: 'width .3s' }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* ── Filter + sort bar ── */}
       <div className="card mb-5 space-y-3">
@@ -506,6 +617,7 @@ function Alerts() {
               className="border border-gray-200 rounded-lg px-2.5 py-1 text-xs bg-white">
               <option value="date_desc">Newest first</option>
               <option value="date_asc">Oldest first</option>
+              <option value="ccf_desc">Most CCF change</option>
               <option value="risk_desc">Highest risk</option>
               <option value="risk_asc">Lowest risk</option>
             </select>

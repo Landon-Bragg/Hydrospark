@@ -103,6 +103,8 @@ def run_migrations():
         ("bills",          "refunded_at",             "DATETIME NULL"),
         ("anomaly_alerts", "resolved_at",             "DATETIME NULL"),
         ("anomaly_alerts", "completion_notes",        "TEXT NULL"),
+        ("anomaly_alerts", "checked_out_by",          "INT NULL"),
+        ("anomaly_alerts", "checked_out_at",          "DATETIME NULL"),
     ]
     try:
         with db.engine.connect() as conn:
