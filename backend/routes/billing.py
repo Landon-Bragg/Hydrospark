@@ -39,6 +39,121 @@ def get_bills():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@billing_bp.route('/unpaid', methods=['GET'])
+@jwt_required()
+def get_unpaid_accounts():
+    """
+    Billing/admin: customers with any unpaid bills, grouped by urgency.
+
+    Urgency tiers (computed, not stored):
+      - critical:  bill status is already 'overdue'
+      - warning:   bill is 'pending' or 'sent' but due_date < today
+      - pending:   bill is 'pending' or 'sent' and due_date >= today
+
+    Query params (all optional):
+      - customer_type   e.g. 'Residential'
+      - search          name, email, or location_id
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user or user.role not in ['admin', 'billing']:
+            return jsonify({'error': 'Access denied'}), 403
+
+        from datetime import date
+        from sqlalchemy import case
+        today = date.today()
+
+        search        = request.args.get('search', '').strip()
+        customer_type = request.args.get('customer_type', '').strip()
+
+        query = (
+            db.session.query(
+                Customer.id,
+                Customer.customer_name,
+                Customer.customer_type,
+                Customer.location_id,
+                Customer.zip_code,
+                Customer.water_status,
+                User.email,
+                func.count(Bill.id).label('unpaid_count'),
+                func.sum(Bill.total_amount).label('unpaid_total'),
+                func.min(Bill.due_date).label('oldest_due'),
+                func.sum(
+                    case((Bill.status == 'overdue', Bill.total_amount), else_=0)
+                ).label('overdue_total'),
+                func.sum(
+                    case(
+                        (
+                            (Bill.status.in_(['pending', 'sent'])) & (Bill.due_date < today),
+                            Bill.total_amount
+                        ),
+                        else_=0
+                    )
+                ).label('past_due_total'),
+            )
+            .join(Bill, Bill.customer_id == Customer.id)
+            .outerjoin(User, User.id == Customer.user_id)
+            .filter(Bill.status.in_(['overdue', 'pending', 'sent']))
+        )
+
+        if customer_type:
+            query = query.filter(Customer.customer_type == customer_type)
+
+        if search:
+            query = query.filter(
+                or_(
+                    Customer.customer_name.ilike(f'%{search}%'),
+                    User.email.ilike(f'%{search}%'),
+                    Customer.location_id.ilike(f'%{search}%'),
+                )
+            )
+
+        rows = (
+            query
+            .group_by(Customer.id, User.email)
+            .order_by(func.sum(Bill.total_amount).desc())
+            .all()
+        )
+
+        def get_urgency(row):
+            if float(row.overdue_total or 0) > 0:
+                return 'critical'
+            if float(row.past_due_total or 0) > 0:
+                return 'warning'
+            return 'pending'
+
+        result = [
+            {
+                'customer_id':    r.id,
+                'customer_name':  r.customer_name,
+                'customer_type':  r.customer_type,
+                'location_id':    r.location_id,
+                'zip_code':       r.zip_code,
+                'email':          r.email,
+                'water_status':   r.water_status or 'active',
+                'unpaid_count':   int(r.unpaid_count),
+                'unpaid_total':   round(float(r.unpaid_total or 0), 2),
+                'oldest_due':     r.oldest_due.isoformat() if r.oldest_due else None,
+                'overdue_total':  round(float(r.overdue_total or 0), 2),
+                'past_due_total': round(float(r.past_due_total or 0), 2),
+                'urgency':        get_urgency(r),
+            }
+            for r in rows
+        ]
+
+        summary = {
+            'critical':    sum(1 for r in result if r['urgency'] == 'critical'),
+            'warning':     sum(1 for r in result if r['urgency'] == 'warning'),
+            'pending':     sum(1 for r in result if r['urgency'] == 'pending'),
+            'total_owed':  round(sum(r['unpaid_total'] for r in result), 2),
+        }
+
+        return jsonify({'unpaid': result, 'summary': summary}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @billing_bp.route('/bills/<int:bill_id>', methods=['GET'])
 @jwt_required()
 def get_bill(bill_id):
