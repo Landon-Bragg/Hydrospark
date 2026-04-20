@@ -50,7 +50,7 @@ export const getBillingStats = (params) => api.get('/billing/stats', { params })
 export const generateBill = (data) => api.post('/billing/generate', data);
 export const updateBill = (id, data) => api.put(`/billing/bills/${id}`, data);
 export const refundBill = (id) => api.post(`/billing/bills/${id}/refund`);
-
+export const getUnpaidAccounts = (params = {}) => api.get('/billing/unpaid', { params });
 // Alerts
 export const getAlerts = (params) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id) => api.post(`/alerts/${id}/acknowledge`);
