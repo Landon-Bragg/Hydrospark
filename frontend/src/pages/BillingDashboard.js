@@ -6,8 +6,10 @@ import {
 import {
   adminSearchBills, updateBill, refundBill, sendNotification,
   getAdminCharges, getBillingStats, generateBill, getUsage, getAlerts,
+  getUnpaidAccounts,
 } from '../services/api';
 import { BillInvoice } from './Bills';
+import UnpaidAccounts from './UnpaidAccounts';
 
 const PER_PAGE = 25;
 
@@ -445,6 +447,9 @@ function BillingDashboard() {
           <p className="text-sm text-gray-500 mt-0.5">{displayStats?.paid_this_month?.count || 0} payments received</p>
         </div>
       </div>
+
+      {/* Unpaid Accounts */}
+      <UnpaidAccounts onOpenCustomer={openCustomerPanel} />
 
       {/* Bills Table */}
       <div className="card">
