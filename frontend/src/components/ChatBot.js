@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { sendChat } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
-const WELCOME = "Hi! I'm HydroBot. I can answer questions about your water usage, bills, forecasts, and account. Try one of the suggestions below or type your own question.";
+const WELCOME = "Hi! I'm HydroBot. I can answer questions about your water usage, bills, forecasts, and account. Tap a question below to get started.";
 
 const CUSTOMER_SUGGESTIONS = [
   "What's my current balance?",
@@ -25,20 +25,16 @@ function ChatBot() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([{ role: 'assistant', content: WELCOME }]);
-  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
   const suggestions = user?.role === 'customer' ? CUSTOMER_SUGGESTIONS : ADMIN_SUGGESTIONS;
 
-  // Pick which suggestions to show after the latest response.
-  // On the welcome message show all. After each exchange rotate a set of 4
-  // so the chips feel fresh without needing AI context.
   const visibleSuggestions = (() => {
     const assistantCount = messages.filter(m => m.role === 'assistant').length;
-    if (assistantCount <= 1) return suggestions;                        // initial: show all
+    if (assistantCount <= 1) return suggestions;
     const lastUserText = messages.filter(m => m.role === 'user').slice(-1)[0]?.content;
-    const pool = suggestions.filter(s => s !== lastUserText);           // drop just-asked
+    const pool = suggestions.filter(s => s !== lastUserText);
     const offset = ((assistantCount - 1) * 3) % pool.length;
     const shown = [];
     for (let i = 0; shown.length < 4; i++) shown.push(pool[(offset + i) % pool.length]);
@@ -50,12 +46,11 @@ function ChatBot() {
   }, [messages, open]);
 
   const send = async (text) => {
-    const trimmed = (text || input).trim();
+    const trimmed = text.trim();
     if (!trimmed || loading) return;
 
     const newMessages = [...messages, { role: 'user', content: trimmed }];
     setMessages(newMessages);
-    setInput('');
     setLoading(true);
 
     const history = newMessages.slice(1, -1);
@@ -67,13 +62,6 @@ function ChatBot() {
       setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I'm unavailable right now." }]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
     }
   };
 
@@ -101,8 +89,10 @@ function ChatBot() {
           style={{ height: '460px' }}
         >
           {/* Header */}
-          <div className="text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)' }}>
+          <div
+            className="text-white px-4 py-3 rounded-t-2xl flex items-center gap-2 flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #1EA7D6 0%, #0A4C78 100%)' }}
+          >
             <span className="text-lg">💧</span>
             <div>
               <p className="font-bold text-sm">HydroBot</p>
@@ -135,14 +125,14 @@ function ChatBot() {
               </div>
             )}
 
-            {/* Suggestion chips — repopulate after every assistant response */}
+            {/* Suggestion chips */}
             {!loading && messages[messages.length - 1]?.role === 'assistant' && (
               <div className="pt-1 flex flex-wrap gap-1.5">
                 {visibleSuggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    className="text-xs px-2.5 py-1.5 rounded-full border transition-all"
+                    className="text-xs px-2.5 py-1.5 rounded-full border transition-all text-left"
                     style={{
                       borderColor: 'rgba(30,167,214,0.35)',
                       color: '#0A4C78',
@@ -163,26 +153,6 @@ function ChatBot() {
               </div>
             )}
             <div ref={bottomRef} />
-          </div>
-
-          {/* Input */}
-          <div className="px-3 py-2 border-t border-gray-200 flex gap-2 flex-shrink-0">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Ask a question..."
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-hydro-spark-blue"
-              disabled={loading}
-            />
-            <button
-              onClick={() => send()}
-              disabled={loading || !input.trim()}
-              className="text-white px-3 py-2 rounded-lg text-sm disabled:opacity-40 transition-all"
-              style={{ background: 'linear-gradient(135deg, #1EA7D6, #0A4C78)' }}
-            >
-              &#8594;
-            </button>
           </div>
         </div>
       )}
