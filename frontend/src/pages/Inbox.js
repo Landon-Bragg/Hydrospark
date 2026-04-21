@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   getSupportThreads, getThreadMessages, sendToCustomer,
-  getMyMessages, sendMyMessage,
+  getMyMessages, sendMyMessage, deleteMessage,
   sendNotification, getNotifications, markNotificationRead, deleteNotification,
   getSentNotifications,
 } from '../services/api';
@@ -45,6 +45,7 @@ function StaffInbox() {
   const [sentLoading, setSentLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const [hoveredMsg, setHoveredMsg] = useState(null);
 
   useEffect(() => {
     loadThreads();
@@ -105,6 +106,15 @@ function StaffInbox() {
       console.error(e);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId) => {
+    try {
+      await deleteMessage(msgId);
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -240,16 +250,31 @@ function StaffInbox() {
                       const isStaff = msg.sender_role !== 'customer';
                       return (
                         <div key={msg.id}
-                          className={`flex mb-3 ${isStaff ? 'justify-end' : 'justify-start'}`}>
-                          <div style={{
-                            maxWidth: '70%',
-                            padding: '8px 12px',
-                            borderRadius: isStaff ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                            background: isStaff ? '#0A4C78' : '#f3f4f6',
-                            color: isStaff ? '#fff' : '#1f2937',
-                          }}>
-                            <p className="text-sm" style={{ lineHeight: '1.4' }}>{msg.content}</p>
-                            <p className="text-xs mt-1 opacity-60">{formatTime(msg.created_at)}</p>
+                          className={`flex mb-3 ${isStaff ? 'justify-end' : 'justify-start'}`}
+                          onMouseEnter={() => isStaff && setHoveredMsg(msg.id)}
+                          onMouseLeave={() => setHoveredMsg(null)}
+                        >
+                          <div style={{ maxWidth: '70%' }}>
+                            <div style={{
+                              padding: '8px 12px',
+                              borderRadius: isStaff ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                              background: isStaff ? '#0A4C78' : '#f3f4f6',
+                              color: isStaff ? '#fff' : '#1f2937',
+                            }}>
+                              <p className="text-sm" style={{ lineHeight: '1.4' }}>{msg.content}</p>
+                              <p className="text-xs mt-1 opacity-60">{formatTime(msg.created_at)}</p>
+                            </div>
+                            {isStaff && hoveredMsg === msg.id && (
+                              <div className="flex justify-end mt-0.5">
+                                <button
+                                  onClick={() => handleDeleteMessage(msg.id)}
+                                  className="text-xs text-red-500 hover:text-red-700 transition-colors px-1"
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  Undo send
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -414,6 +439,7 @@ function CustomerInbox() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [openNotif, setOpenNotif] = useState(null);
+  const [hoveredMsg, setHoveredMsg] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -477,6 +503,15 @@ function CustomerInbox() {
       console.error(e);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId) => {
+    try {
+      await deleteMessage(msgId);
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -632,21 +667,37 @@ function CustomerInbox() {
               messages.map(msg => {
                 const isMe = msg.sender_role === 'customer';
                 return (
-                  <div key={msg.id} className={`flex mb-3 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div style={{
-                      maxWidth: '70%',
-                      padding: '8px 12px',
-                      borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                      background: isMe ? '#0A4C78' : '#f3f4f6',
-                      color: isMe ? '#fff' : '#1f2937',
-                    }}>
-                      {!isMe && (
-                        <p className="text-xs font-semibold mb-1 opacity-60">
-                          {msg.sender_name || 'Support'}
-                        </p>
+                  <div key={msg.id}
+                    className={`flex mb-3 ${isMe ? 'justify-end' : 'justify-start'}`}
+                    onMouseEnter={() => isMe && setHoveredMsg(msg.id)}
+                    onMouseLeave={() => setHoveredMsg(null)}
+                  >
+                    <div style={{ maxWidth: '70%' }}>
+                      <div style={{
+                        padding: '8px 12px',
+                        borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                        background: isMe ? '#0A4C78' : '#f3f4f6',
+                        color: isMe ? '#fff' : '#1f2937',
+                      }}>
+                        {!isMe && (
+                          <p className="text-xs font-semibold mb-1 opacity-60">
+                            {msg.sender_name || 'Support'}
+                          </p>
+                        )}
+                        <p className="text-sm" style={{ lineHeight: '1.4' }}>{msg.content}</p>
+                        <p className="text-xs mt-1 opacity-60">{formatTime(msg.created_at)}</p>
+                      </div>
+                      {isMe && hoveredMsg === msg.id && (
+                        <div className="flex justify-end mt-0.5">
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="text-xs text-red-500 hover:text-red-700 transition-colors px-1"
+                            style={{ fontSize: '11px' }}
+                          >
+                            Undo send
+                          </button>
+                        </div>
                       )}
-                      <p className="text-sm" style={{ lineHeight: '1.4' }}>{msg.content}</p>
-                      <p className="text-xs mt-1 opacity-60">{formatTime(msg.created_at)}</p>
                     </div>
                   </div>
                 );
