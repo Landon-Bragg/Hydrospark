@@ -291,12 +291,4 @@ def delete_message(message_id):
     # Sender can always delete their own message
     is_sender = msg.sender_id == user_id
     # Staff can delete any staff-sent message
-    is_staff = user and user.role in ['admin', 'billing']
-    is_staff_message = msg.sender_role in ['admin', 'billing']
-
-    if not (is_sender or (is_staff and is_staff_message)):
-        return jsonify({'error': 'Access denied'}), 403
-
-    db.session.delete(msg)
-    db.session.commit()
-    return jsonify({'ok': True}), 200
+    is
