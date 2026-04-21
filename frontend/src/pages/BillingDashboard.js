@@ -9,7 +9,7 @@ import {
   getUnpaidAccounts,
 } from '../services/api';
 import { BillInvoice } from './Bills';
-import UnpaidAccounts from './UnpaidAccounts';
+import UnpaidAccounts from '../components/UnpaidAccounts';
 
 const PER_PAGE = 25;
 
