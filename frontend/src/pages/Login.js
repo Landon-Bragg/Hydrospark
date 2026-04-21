@@ -162,28 +162,6 @@ function Login() {
               </Link>
             </p>
           </div>
-
-          {/* Demo credentials */}
-          <div
-            className="mt-5 p-4 rounded-xl"
-            style={{
-              background: 'rgba(10, 76, 120, 0.05)',
-              border: '1px solid rgba(10, 76, 120, 0.10)',
-            }}
-          >
-            <p className="text-xs font-semibold text-hydro-deep-aqua uppercase tracking-wider mb-2">
-              Demo Credentials
-            </p>
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500">
-                <span className="font-medium text-gray-700">Admin:</span>{' '}
-                admin@hydrospark.com / admin123
-              </p>
-              <p className="text-xs text-gray-400">
-                Customer password: <span className="font-medium text-gray-600">welcome123</span>
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
