@@ -277,3 +277,24 @@ def get_sent_notifications():
 
     result = sorted(groups.values(), key=lambda x: x['created_at'] or '', reverse=True)
     return jsonify({'sent_notifications': result})
+
+@support_bp.route('/messages/<int:message_id>', methods=['DELETE'])
+@jwt_required()
+def delete_message(message_id):
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+
+    msg = SupportMessage.query.get(message_id)
+    if not msg:
+        return jsonify({'error': 'Message not found'}), 404
+
+    is_sender = msg.sender_id == user_id
+    is_staff = user and user.role in ['admin', 'billing']
+    is_staff_message = msg.sender_role in ['admin', 'billing']
+
+    if not (is_sender or (is_staff and is_staff_message)):
+        return jsonify({'error': 'Access denied'}), 403
+
+    db.session.delete(msg)
+    db.session.commit()
+    return jsonify({'ok': True}), 200

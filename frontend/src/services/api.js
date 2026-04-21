@@ -101,5 +101,5 @@ export const markNotificationRead = (id) => api.patch(`/support/notifications/${
 export const deleteNotification = (id) => api.delete(`/support/notifications/${id}`);
 export const getUnreadCount = () => api.get('/support/notifications/unread-count');
 export const getSentNotifications = () => api.get('/support/sent-notifications');
-
+export const deleteMessage = (messageId) => api.delete(`/support/messages/${messageId}`);
 export default api;
