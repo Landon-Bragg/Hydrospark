@@ -145,49 +145,6 @@ Your CSV/XLSX file must have these column headers (order doesn't matter):
 
 ---
 
-## Keeping Teammates in Sync (Database Updates)
-
-The database is seeded from `backend/seed_data/hydrospark_data.sql.gz` — a compressed snapshot of the full database committed to git. When you make changes to the database that teammates need (new data, updated records, etc.), follow this process:
-
-### When you update the database and want to share it
-
-**1. Generate a new snapshot from your running database:**
-
-```bash
-docker exec hydrospark-mysql bash -c "mysqldump -uroot -ppassword --no-tablespaces --no-create-info hydrospark 2>/dev/null | gzip > /tmp/hydrospark_data.sql.gz"
-docker cp hydrospark-mysql:/tmp/hydrospark_data.sql.gz backend/seed_data/hydrospark_data.sql.gz
-```
-
-**2. Commit and push the new snapshot:**
-
-```bash
-git add backend/seed_data/hydrospark_data.sql.gz
-git commit -m "Update database snapshot"
-git push
-```
-
----
-
-### When a teammate has pushed a new snapshot and you want to get it
-
-**1. Pull the latest changes:**
-
-```bash
-git pull
-```
-
-**2. Wipe your local database and reload from the new snapshot:**
-
-```bash
-docker-compose down -v
-docker-compose up
-```
-
-> The `-v` flag deletes your local database volume. The new snapshot loads automatically on startup.
-> This will take a minute or two — wait until you see `frontend | Compiled successfully!` before opening the app.
-
----
-
 ## Stopping the Application
 
 ```bash
