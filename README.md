@@ -3,13 +3,6 @@
 A water utility management platform with usage tracking, ML-based forecasting, anomaly detection, automated billing, and an AI assistant (HydroBot) for account support.
 
 ---
-
-
-## Live Deployment 
-**Frontend:** https://exciting-abundance-production.up.railway.app
-
-**Backend API:** https://hydrospark-py-production.up.railway.app/api/health
-
 ## Prerequisites
 
 You only need two things installed:
@@ -192,44 +185,6 @@ docker-compose up
 
 > The `-v` flag deletes your local database volume. The new snapshot loads automatically on startup.
 > This will take a minute or two — wait until you see `frontend | Compiled successfully!` before opening the app.
-
----
-
-## What Each Tab Does
-
-### For Customers
-
-| Tab | What it shows |
-|-----|--------------|
-| **Dashboard** | Usage summary, recent bills, active alerts, and neighborhood comparison by zip code |
-| **Usage** | Daily usage chart, monthly breakdown, and cost estimates |
-| **Bills** | All past bills — click any row to expand full invoice details |
-| **Forecasts** | Generate a 12-month ML usage and cost prediction |
-
-### For Billing / Support
-
-| Tab | What it shows |
-|-----|--------------|
-| **Billing** | All customer bills with filters, stats cards, and inline invoice expansion |
-| **Alerts** | Anomaly alerts — acknowledge, dispatch to field, or apply bill credits |
-| **Inbox** | Direct messages with customers and broadcast notifications |
-| **Usage** | Full usage data across all customers |
-
-### For Admins (all of the above, plus)
-
-| Tab | What it shows |
-|-----|--------------|
-| **Admin** | User management, data import, bill generation, anomaly detection, zip code rates, and water shutoff management |
-
-### For Field Technicians
-
-| Tab | What it shows |
-|-----|--------------|
-| **Work Orders** | Open dispatched jobs with customer address, usage overage, and dispatch notes — mark complete with field notes |
-
-### HydroBot (all users)
-
-A floating chat assistant is available on every page. Click the chat icon in the bottom-right corner to ask questions about your usage, bills, forecasts, or account status. Admins can also query system-wide stats and look up customer accounts.
 
 ---
 
