@@ -46,6 +46,7 @@ function StaffInbox() {
 
   const messagesEndRef = useRef(null);
   const [hoveredMsg, setHoveredMsg] = useState(null);
+  const [contactSearch, setContactSearch] = useState('');
 
   useEffect(() => {
     loadThreads();
@@ -141,6 +142,12 @@ function StaffInbox() {
   };
 
   const selectedThread = threads.find(t => t.customer_id === selectedCustomerId);
+  const filteredThreads = contactSearch.trim()
+    ? threads.filter(t =>
+        t.customer_name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        t.location_id?.toLowerCase().includes(contactSearch.toLowerCase())
+      )
+    : threads;
 
   return (
     <div>
@@ -178,7 +185,14 @@ function StaffInbox() {
             overflowY: 'auto', background: '#f9fafb',
           }}>
             <div className="p-3 border-b border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customers</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Customers</p>
+              <input
+                type="text"
+                value={contactSearch}
+                onChange={e => setContactSearch(e.target.value)}
+                placeholder="Search contacts…"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white"
+              />
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -186,8 +200,10 @@ function StaffInbox() {
               </div>
             ) : threads.length === 0 ? (
               <p className="text-sm text-gray-400 p-4">No customer accounts yet.</p>
+            ) : filteredThreads.length === 0 ? (
+              <p className="text-xs text-gray-400 p-4 text-center">No contacts match "{contactSearch}"</p>
             ) : (
-              threads.map(thread => (
+              filteredThreads.map(thread => (
                 <button
                   key={thread.customer_id}
                   onClick={() => selectThread(thread.customer_id)}
