@@ -378,6 +378,10 @@ def _alert_dict(alert):
         d['checked_out_by_name'] = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email
     else:
         d['checked_out_by_name'] = None
+    if alert.checked_out_at:
+        d['checkout_duration_seconds'] = int((datetime.utcnow() - alert.checked_out_at).total_seconds())
+    else:
+        d['checkout_duration_seconds'] = None
     return d
 
 

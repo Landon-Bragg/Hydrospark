@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { getWorkOrders, completeWorkOrder, checkoutWorkOrder, releaseWorkOrder } from '../services/api';
@@ -22,6 +22,38 @@ function fmtDateTime(iso) {
       hour: '2-digit', minute: '2-digit',
     });
   } catch { return iso; }
+}
+
+function fmtElapsed(seconds) {
+  if (seconds == null || seconds < 0) return null;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function useElapsedSeconds(checkedOutAt) {
+  const [elapsed, setElapsed] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!checkedOutAt) { setElapsed(null); return; }
+    const base = new Date(checkedOutAt + (checkedOutAt.endsWith('Z') ? '' : 'Z')).getTime();
+    const tick = () => setElapsed(Math.floor((Date.now() - base) / 1000));
+    tick();
+    timerRef.current = setInterval(tick, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [checkedOutAt]);
+
+  return elapsed;
+}
+
+function CheckoutTimer({ checkedOutAt, style }) {
+  const elapsed = useElapsedSeconds(checkedOutAt);
+  if (elapsed == null) return null;
+  return <span style={style}>{fmtElapsed(elapsed)}</span>;
 }
 
 // ── Complete Work Order Modal ──────────────────────────────────────────────────
@@ -370,10 +402,18 @@ function WorkOrders() {
                     </div>
                   </div>
 
-                  {/* ── Checkout time (if me) ── */}
-                  {isCheckedOutByMe && order.checked_out_at && (
-                    <div style={{ marginBottom: '10px', fontSize: '12px', color: '#2563eb' }}>
-                      Checked out: {fmtDateTime(order.checked_out_at)}
+                  {/* ── Checkout elapsed time ── */}
+                  {order.checked_out_at && (isCheckedOutByMe || isCheckedOutByOther) && (
+                    <div style={{ marginBottom: '10px', fontSize: '12px',
+                                  color: isCheckedOutByMe ? '#2563eb' : '#6b7280' }}>
+                      {isCheckedOutByMe ? 'Checked out for ' : `${order.checked_out_by_name || 'In progress'} for `}
+                      <CheckoutTimer
+                        checkedOutAt={order.checked_out_at}
+                        style={{ fontWeight: 700 }}
+                      />
+                      <span style={{ marginLeft: '8px', opacity: 0.6 }}>
+                        (since {fmtDateTime(order.checked_out_at)})
+                      </span>
                     </div>
                   )}
 

@@ -790,6 +790,7 @@ def get_field_throughput():
                     'customer_name': a.customer.customer_name if a.customer else None,
                     'alert_date':    a.alert_date.isoformat() if a.alert_date else None,
                     'checked_out_at': a.checked_out_at.isoformat() if a.checked_out_at else None,
+                    'checkout_duration_seconds': int((datetime.utcnow() - a.checked_out_at).total_seconds()) if a.checked_out_at else None,
                 } for a in checked_out],
             })
 

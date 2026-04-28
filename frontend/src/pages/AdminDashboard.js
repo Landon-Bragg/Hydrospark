@@ -1047,7 +1047,16 @@ function AdminDashboard() {
                             style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
                             <span className="font-medium text-blue-800">{job.customer_name || 'Unknown'}</span>
                             <span className="text-xs text-blue-500">
-                              Alert: {job.alert_date} &middot; Out since: {job.checked_out_at ? new Date(job.checked_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                              Alert: {job.alert_date} &middot; Out for: {
+                                job.checkout_duration_seconds != null
+                                  ? (() => {
+                                      const s = job.checkout_duration_seconds;
+                                      const h = Math.floor(s / 3600);
+                                      const m = Math.floor((s % 3600) / 60);
+                                      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                    })()
+                                  : '—'
+                              }
                             </span>
                           </div>
                         ))}
