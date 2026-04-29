@@ -135,7 +135,31 @@ with app.app_context():
 def seed_default_users():
     from database import User
     import bcrypt
-    if not User.query.filter_by(email='billing@hydrospark.com').first():
+
+    admin = User.query.filter_by(email='admin@hydrospark.com').first()
+    if not admin:
+        pw_hash = bcrypt.hashpw(b'admin123', bcrypt.gensalt(12)).decode()
+        admin = User(
+            email='admin@hydrospark.com',
+            password_hash=pw_hash,
+            role='admin',
+            first_name='Admin',
+            last_name='User',
+            is_active=True,
+            is_approved=True,
+        )
+        db.session.add(admin)
+        db.session.commit()
+        print('Created default admin user: admin@hydrospark.com / admin123')
+    else:
+        # Ensure the hash is a valid bcrypt hash (fixes any plaintext from old auth bypass)
+        if not admin.password_hash.startswith('$2'):
+            admin.password_hash = bcrypt.hashpw(b'admin123', bcrypt.gensalt(12)).decode()
+            db.session.commit()
+            print('Updated admin password hash to bcrypt.')
+
+    billing = User.query.filter_by(email='billing@hydrospark.com').first()
+    if not billing:
         pw_hash = bcrypt.hashpw(b'billing123', bcrypt.gensalt(12)).decode()
         billing_user = User(
             email='billing@hydrospark.com',
@@ -149,8 +173,13 @@ def seed_default_users():
         db.session.add(billing_user)
         db.session.commit()
         print('Created default billing user: billing@hydrospark.com / billing123')
+    elif not billing.password_hash.startswith('$2'):
+        billing.password_hash = bcrypt.hashpw(b'billing123', bcrypt.gensalt(12)).decode()
+        db.session.commit()
+        print('Updated billing password hash to bcrypt.')
 
-    if not User.query.filter_by(email='field@hydrospark.com').first():
+    field = User.query.filter_by(email='field@hydrospark.com').first()
+    if not field:
         pw_hash = bcrypt.hashpw(b'field123', bcrypt.gensalt(12)).decode()
         field_user = User(
             email='field@hydrospark.com',
@@ -164,6 +193,10 @@ def seed_default_users():
         db.session.add(field_user)
         db.session.commit()
         print('Created default field user: field@hydrospark.com / field123')
+    elif not field.password_hash.startswith('$2'):
+        field.password_hash = bcrypt.hashpw(b'field123', bcrypt.gensalt(12)).decode()
+        db.session.commit()
+        print('Updated field password hash to bcrypt.')
 
 with app.app_context():
     seed_default_users()
