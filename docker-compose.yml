@@ -19,6 +19,7 @@ services:
       timeout: 5s
       retries: 5
 
+## This is technically a security vulnerability, but since this is only for local development, it's acceptable. In production, you should use a more secure password management strategy.
   adminer:
     image: adminer:latest
     restart: always

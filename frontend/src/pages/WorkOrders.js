@@ -183,7 +183,6 @@ function WorkOrders() {
       const res = await getWorkOrders({ status });
       setOrders(res.data.work_orders || []);
     } catch (err) {
-      console.error('Failed to load work orders', err);
     } finally {
       setLoading(false);
     }

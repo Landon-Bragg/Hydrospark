@@ -63,8 +63,7 @@ function StaffInbox() {
       const r = await getSupportThreads();
       setThreads(r.data.threads || []);
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setLoading(false);
     }
   };
@@ -75,8 +74,7 @@ function StaffInbox() {
       const r = await getSentNotifications();
       setSentNotifs(r.data.sent_notifications || []);
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setSentLoading(false);
     }
   };
@@ -90,8 +88,7 @@ function StaffInbox() {
       // Refresh threads to reset unread count
       loadThreads();
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setMsgLoading(false);
     }
   };
@@ -104,8 +101,7 @@ function StaffInbox() {
       setMessages(prev => [...prev, r.data.message]);
       setCompose('');
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setSending(false);
     }
   };
@@ -115,8 +111,7 @@ function StaffInbox() {
       await deleteMessage(msgId);
       setMessages(prev => prev.filter(m => m.id !== msgId));
     } catch (e) {
-      console.error(e);
-    }
+          }
   };
 
   const handleSendNotification = async () => {
@@ -135,8 +130,7 @@ function StaffInbox() {
       setNotifUserId('');
       loadSentNotifs();
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setNotifSending(false);
     }
   };
@@ -485,8 +479,7 @@ function CustomerInbox() {
       await markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (e) {
-      console.error(e);
-    }
+          }
   };
 
   const handleDelete = async (id, e) => {
@@ -496,8 +489,7 @@ function CustomerInbox() {
       setNotifications(prev => prev.filter(n => n.id !== id));
       if (openNotif?.id === id) setOpenNotif(null);
     } catch (e) {
-      console.error(e);
-    }
+          }
   };
 
   const handleOpenNotif = (notif) => {
@@ -516,8 +508,7 @@ function CustomerInbox() {
       setMessages(prev => [...prev, r.data.message]);
       setCompose('');
     } catch (e) {
-      console.error(e);
-    } finally {
+          } finally {
       setSending(false);
     }
   };
@@ -527,8 +518,7 @@ function CustomerInbox() {
       await deleteMessage(msgId);
       setMessages(prev => prev.filter(m => m.id !== msgId));
     } catch (e) {
-      console.error(e);
-    }
+          }
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;

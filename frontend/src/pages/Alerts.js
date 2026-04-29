@@ -322,7 +322,7 @@ function Alerts() {
       setTotal(res.data.total    || 0);
       setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0 });
     } catch (err) {
-      console.error('Failed to load alerts', err);
+      // error handled by empty state
     } finally {
       setLoading(false);
     }
@@ -374,7 +374,6 @@ function Alerts() {
       await acknowledgeAlert(alertId);
       loadAlerts();
     } catch (err) {
-      console.error('Failed to acknowledge alert', err);
     }
   };
 
@@ -383,7 +382,6 @@ function Alerts() {
       await resolveAlert(alertId);
       loadAlerts();
     } catch (err) {
-      console.error('Failed to resolve alert', err);
     }
   };
 

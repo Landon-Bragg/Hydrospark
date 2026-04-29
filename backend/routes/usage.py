@@ -61,6 +61,65 @@ def get_usage():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@usage_bp.route('/download', methods=['GET'])
+@jwt_required()
+def download_usage():
+    """Download water usage data as CSV"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        customer_id = request.args.get('customer_id', type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        query = WaterUsage.query.join(Customer, WaterUsage.customer_id == Customer.id)
+
+        if user.role == 'customer':
+            if not user.customer:
+                return jsonify({'error': 'Customer profile not found'}), 404
+            query = query.filter(WaterUsage.customer_id == user.customer.id)
+        elif customer_id:
+            query = query.filter(WaterUsage.customer_id == customer_id)
+
+        try:
+            if start_date:
+                query = query.filter(WaterUsage.usage_date >= datetime.fromisoformat(start_date))
+            if end_date:
+                query = query.filter(WaterUsage.usage_date <= datetime.fromisoformat(end_date))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid date format. Use ISO format: YYYY-MM-DD'}), 400
+
+        records = query.order_by(WaterUsage.usage_date.asc()).all()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        if user.role in ['admin', 'billing']:
+            writer.writerow(['Customer Name', 'Customer Type', 'Location ID', 'Usage Date', 'Daily Usage (CCF)'])
+            for r in records:
+                writer.writerow([
+                    r.customer.customer_name if r.customer else '',
+                    r.customer.customer_type if r.customer else '',
+                    r.customer.location_id if r.customer else '',
+                    r.usage_date,
+                    r.daily_usage_ccf,
+                ])
+        else:
+            writer.writerow(['Usage Date', 'Daily Usage (CCF)'])
+            for r in records:
+                writer.writerow([r.usage_date, r.daily_usage_ccf])
+
+        filename = f"water_usage_{start_date or 'all'}_{end_date or 'all'}.csv"
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @usage_bp.route('/summary', methods=['GET'])
 @jwt_required()
 def get_usage_summary():

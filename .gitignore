@@ -48,3 +48,7 @@ CLAUDE.md
 .DS_Store
 Thumbs.db
 
+# Artifacts
+mnt/
+package-lock.json
+
