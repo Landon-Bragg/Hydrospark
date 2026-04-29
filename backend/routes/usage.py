@@ -20,14 +20,12 @@ def get_usage():
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
 
-        # Get query parameters
         customer_id = request.args.get('customer_id', type=int)
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
 
         query = WaterUsage.query
 
-        # Apply customer filter based on role
         if user.role == 'customer':
             if not user.customer:
                 return jsonify({'error': 'Customer profile not found'}), 404
@@ -35,13 +33,11 @@ def get_usage():
         elif customer_id:
             query = query.filter_by(customer_id=customer_id)
 
-        # Apply date filters
         if start_date:
             query = query.filter(WaterUsage.usage_date >= datetime.fromisoformat(start_date))
         if end_date:
             query = query.filter(WaterUsage.usage_date <= datetime.fromisoformat(end_date))
 
-        # Order by date
         usage_data = query.order_by(WaterUsage.usage_date.desc()).limit(1000).all()
 
         if user.role in ['admin', 'billing']:
@@ -61,64 +57,6 @@ def get_usage():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@usage_bp.route('/download', methods=['GET'])
-@jwt_required()
-def download_usage():
-    """Download water usage data as CSV"""
-    try:
-        user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
-
-        customer_id = request.args.get('customer_id', type=int)
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-
-        query = WaterUsage.query.join(Customer, WaterUsage.customer_id == Customer.id)
-
-        if user.role == 'customer':
-            if not user.customer:
-                return jsonify({'error': 'Customer profile not found'}), 404
-            query = query.filter(WaterUsage.customer_id == user.customer.id)
-        elif customer_id:
-            query = query.filter(WaterUsage.customer_id == customer_id)
-
-        try:
-            if start_date:
-                query = query.filter(WaterUsage.usage_date >= datetime.fromisoformat(start_date))
-            if end_date:
-                query = query.filter(WaterUsage.usage_date <= datetime.fromisoformat(end_date))
-        except (TypeError, ValueError):
-            return jsonify({'error': 'Invalid date format. Use ISO format: YYYY-MM-DD'}), 400
-
-        records = query.order_by(WaterUsage.usage_date.asc()).all()
-
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        if user.role in ['admin', 'billing']:
-            writer.writerow(['Customer Name', 'Customer Type', 'Location ID', 'Usage Date', 'Daily Usage (CCF)'])
-            for r in records:
-                writer.writerow([
-                    r.customer.customer_name if r.customer else '',
-                    r.customer.customer_type if r.customer else '',
-                    r.customer.location_id if r.customer else '',
-                    r.usage_date,
-                    r.daily_usage_ccf,
-                ])
-        else:
-            writer.writerow(['Usage Date', 'Daily Usage (CCF)'])
-            for r in records:
-                writer.writerow([r.usage_date, r.daily_usage_ccf])
-
-        filename = f"water_usage_{start_date or 'all'}_{end_date or 'all'}.csv"
-        return Response(
-            output.getvalue(),
-            mimetype='text/csv',
-            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
-        )
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @usage_bp.route('/summary', methods=['GET'])
 @jwt_required()
@@ -137,7 +75,6 @@ def get_usage_summary():
             if not customer_id:
                 return jsonify({'error': 'customer_id required'}), 400
 
-        # Get date range (default: last 30 days)
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=30)
 
@@ -164,7 +101,6 @@ def get_usage_summary():
             WaterUsage.usage_date <= end_date
         ).scalar() or 0
 
-        # Include rate and estimated cost for customers
         rate_per_ccf = None
         estimated_cost = None
         customer_obj = Customer.query.get(customer_id)
@@ -254,8 +190,6 @@ def get_top_customers():
 def get_zip_averages():
     """
     Return average monthly bill and usage per customer type for a given zip code.
-    Customers use this to compare their usage against others in their area.
-    Query param: zip_code (optional — defaults to the calling customer's zip code).
     """
     try:
         user_id = int(get_jwt_identity())
@@ -263,7 +197,6 @@ def get_zip_averages():
 
         zip_code = request.args.get('zip_code')
 
-        # Customers default to their own zip code
         if not zip_code and user.role == 'customer':
             if not user.customer or not user.customer.zip_code:
                 return jsonify({'zip_code': None, 'averages': []}), 200
@@ -272,7 +205,6 @@ def get_zip_averages():
         if not zip_code:
             return jsonify({'error': 'zip_code is required'}), 400
 
-        # Average monthly bill and usage per customer type in this zip code
         rows = (
             db.session.query(
                 Customer.customer_type,
@@ -327,7 +259,6 @@ def download_usage():
 
         is_staff = user.role in ('admin', 'billing')
 
-        # Determine which customer(s) to include
         customer_id_param = request.args.get('customer_id', type=int)
         if is_staff and customer_id_param:
             customers = Customer.query.filter_by(id=customer_id_param).all()
@@ -338,7 +269,6 @@ def download_usage():
                 return jsonify({'error': 'Customer profile not found'}), 404
             customers = [user.customer]
 
-        # Build usage query
         query = (
             db.session.query(WaterUsage, Customer)
             .join(Customer, Customer.id == WaterUsage.customer_id)
@@ -353,7 +283,6 @@ def download_usage():
 
         rows = query.order_by(WaterUsage.usage_date.asc(), Customer.customer_name.asc()).all()
 
-        # Compute per-customer daily averages for the deviation column
         avg_map = {}
         for usage, customer in rows:
             if customer.id not in avg_map:
@@ -361,7 +290,6 @@ def download_usage():
             avg_map[customer.id].append(float(usage.daily_usage_ccf))
         avg_by_customer = {cid: (sum(vals) / len(vals)) for cid, vals in avg_map.items()}
 
-        # Also pull billing rate per customer for estimated cost column
         from services.billing_service import BillingService
         bs = BillingService()
         rate_map = {}
@@ -372,11 +300,9 @@ def download_usage():
             except Exception:
                 rate_map[cid] = 5.72
 
-        # Write CSV
         output = io.StringIO()
         writer = csv.writer(output)
 
-        # Metadata header
         generated_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
         writer.writerow(['# HydroSpark Water Usage Export'])
         writer.writerow([f'# Period: {start_date} to {end_date}'])
@@ -385,7 +311,6 @@ def download_usage():
             writer.writerow([f'# Account: {user.customer.customer_name}'])
         writer.writerow([])
 
-        # Column headers
         if is_staff:
             writer.writerow([
                 'Date', 'Customer Name', 'Customer Type', 'Location ID',
@@ -426,7 +351,6 @@ def download_usage():
                     f'{dev_pct:+.1f}', rtype,
                 ])
 
-        # Summary footer
         writer.writerow([])
         if rows:
             writer.writerow(['# Summary'])
@@ -438,7 +362,6 @@ def download_usage():
         csv_content = output.getvalue()
         output.close()
 
-        # Filename
         if not is_staff and user.customer:
             name_slug = user.customer.customer_name.lower().replace(' ', '_')
             filename  = f'water_usage_{name_slug}_{start_date}_{end_date}.csv'
