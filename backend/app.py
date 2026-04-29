@@ -5,7 +5,6 @@ HydroSpark Measurement and Billing System - Main Application
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from flask_mail import Mail
 from dotenv import load_dotenv
 import os
 import secrets
@@ -34,14 +33,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
 
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('GMAIL_USER', 'conbenlan@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('GMAIL_USER', 'conbenlan@gmail.com')
-
 # Initialize extensions
 CORS(app, resources={r"/api/*": {
     "origins": [
@@ -52,7 +43,6 @@ CORS(app, resources={r"/api/*": {
     "allow_headers": ["Content-Type", "Authorization"]
 }})
 jwt = JWTManager(app)
-mail = Mail(app)
 
 
 @jwt.invalid_token_loader

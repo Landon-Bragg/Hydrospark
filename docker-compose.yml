@@ -37,8 +37,6 @@ services:
       - DATABASE_URL=mysql+pymysql://root:password@mysql:3306/hydrospark
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - FLASK_ENV=development
-      - GMAIL_USER=conbenlan@gmail.com
-      - GMAIL_APP_PASSWORD=cbl1234567!
       - GROQ_API_KEY=${GROQ_API_KEY}
     volumes:
       - ./backend:/app
