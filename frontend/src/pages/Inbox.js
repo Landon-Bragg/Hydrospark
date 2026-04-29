@@ -62,8 +62,9 @@ function StaffInbox() {
     try {
       const r = await getSupportThreads();
       setThreads(r.data.threads || []);
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setLoading(false);
     }
   };
@@ -73,8 +74,9 @@ function StaffInbox() {
     try {
       const r = await getSentNotifications();
       setSentNotifs(r.data.sent_notifications || []);
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setSentLoading(false);
     }
   };
@@ -87,8 +89,9 @@ function StaffInbox() {
       setMessages(r.data.messages || []);
       // Refresh threads to reset unread count
       loadThreads();
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setMsgLoading(false);
     }
   };
@@ -100,8 +103,9 @@ function StaffInbox() {
       const r = await sendToCustomer(selectedCustomerId, compose.trim());
       setMessages(prev => [...prev, r.data.message]);
       setCompose('');
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setSending(false);
     }
   };
@@ -110,8 +114,9 @@ function StaffInbox() {
     try {
       await deleteMessage(msgId);
       setMessages(prev => prev.filter(m => m.id !== msgId));
-    } catch (e) {
-          }
+    } catch {
+      // ignored
+    }
   };
 
   const handleSendNotification = async () => {
@@ -129,8 +134,9 @@ function StaffInbox() {
       setNotifTarget('all');
       setNotifUserId('');
       loadSentNotifs();
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setNotifSending(false);
     }
   };
@@ -478,8 +484,9 @@ function CustomerInbox() {
     try {
       await markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    } catch (e) {
-          }
+    } catch {
+      // ignored
+    }
   };
 
   const handleDelete = async (id, e) => {
@@ -488,8 +495,9 @@ function CustomerInbox() {
       await deleteNotification(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
       if (openNotif?.id === id) setOpenNotif(null);
-    } catch (e) {
-          }
+    } catch {
+      // ignored
+    }
   };
 
   const handleOpenNotif = (notif) => {
@@ -507,8 +515,9 @@ function CustomerInbox() {
       const r = await sendMyMessage(compose.trim());
       setMessages(prev => [...prev, r.data.message]);
       setCompose('');
-    } catch (e) {
-          } finally {
+    } catch {
+      // ignored
+    } finally {
       setSending(false);
     }
   };
@@ -517,8 +526,9 @@ function CustomerInbox() {
     try {
       await deleteMessage(msgId);
       setMessages(prev => prev.filter(m => m.id !== msgId));
-    } catch (e) {
-          }
+    } catch {
+      // ignored
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;

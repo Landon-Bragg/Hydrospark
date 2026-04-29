@@ -182,7 +182,8 @@ function WorkOrders() {
     try {
       const res = await getWorkOrders({ status });
       setOrders(res.data.work_orders || []);
-    } catch (err) {
+    } catch {
+      // ignored
     } finally {
       setLoading(false);
     }

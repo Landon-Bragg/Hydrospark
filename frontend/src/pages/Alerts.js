@@ -321,7 +321,7 @@ function Alerts() {
       setAlerts(res.data.alerts  || []);
       setTotal(res.data.total    || 0);
       setCounts(res.data.counts  || { new: 0, acknowledged: 0, resolved: 0 });
-    } catch (err) {
+    } catch {
       // error handled by empty state
     } finally {
       setLoading(false);
@@ -373,7 +373,8 @@ function Alerts() {
     try {
       await acknowledgeAlert(alertId);
       loadAlerts();
-    } catch (err) {
+    } catch {
+      // ignored
     }
   };
 
@@ -381,7 +382,8 @@ function Alerts() {
     try {
       await resolveAlert(alertId);
       loadAlerts();
-    } catch (err) {
+    } catch {
+      // ignored
     }
   };
 
