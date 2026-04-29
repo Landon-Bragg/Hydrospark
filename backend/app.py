@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import os
 import secrets
 from database import init_db, db
-from flask import request
+import logging
 # Load environment variables
 load_dotenv()
 
@@ -47,25 +47,15 @@ jwt = JWTManager(app)
 
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    print(f"Invalid token error: {error}")
     return jsonify({'error': 'Invalid token', 'details': str(error)}), 422
 
 @jwt.unauthorized_loader
 def unauthorized_callback(error):
-    print(f"Unauthorized error: {error}")
     return jsonify({'error': 'Missing authorization', 'details': str(error)}), 422
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    print(f"Expired token")
     return jsonify({'error': 'Token has expired'}), 422
-
-@app.before_request
-def log_request_info():
-    print(f"Request: {request.method} {request.path}")
-    print(f"Headers: {dict(request.headers)}")
-    if request.method == 'POST':
-        print(f"Content-Type: {request.content_type}")
 
 # Initialize database
 init_db(app)

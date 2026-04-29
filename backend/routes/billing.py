@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, Bill, WaterUsage, BillingRate
 from datetime import datetime, timedelta
 from sqlalchemy import func, or_
+import logging
 
 billing_bp = Blueprint('billing', __name__)
 
@@ -74,8 +75,11 @@ def generate_bill():
         
         data = request.get_json()
         customer_id = data.get('customer_id')
-        start_date = datetime.fromisoformat(data.get('start_date'))
-        end_date = datetime.fromisoformat(data.get('end_date'))
+        try:
+            start_date = datetime.fromisoformat(data.get('start_date'))
+            end_date = datetime.fromisoformat(data.get('end_date'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid date format. Use ISO format: YYYY-MM-DD'}), 400
         
         customer = Customer.query.get(customer_id)
         if not customer:
@@ -331,8 +335,8 @@ def refund_bill(bill_id):
                         ),
                     )
                     db.session.add(notif)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"Refund notification failed for bill {bill_id}: {e}")
 
         db.session.commit()
         return jsonify({'message': 'Bill refunded', 'bill': bill.to_dict()}), 200

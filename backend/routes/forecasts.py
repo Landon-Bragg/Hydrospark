@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from database import db, User, Customer, UsageForecast
 from services.ml_service import MLService
 from datetime import datetime
+import logging
 
 forecasts_bp = Blueprint('forecasts', __name__)
 ml_service = MLService()
@@ -32,13 +33,9 @@ def generate_forecast():
         
         months = data.get('months', 12)
         
-        print(f"Generating forecast for customer {customer_id}, months: {months}")
-        
         # Generate forecast
         forecasts = ml_service.generate_forecast(customer_id, months)
-        
-        print(f"Forecast result: {forecasts}")
-        
+
         if isinstance(forecasts, dict) and 'error' in forecasts:
             return jsonify(forecasts), 400
         
@@ -50,9 +47,7 @@ def generate_forecast():
         }), 200
         
     except Exception as e:
-        print(f"Forecast generation error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logging.error(f"Forecast generation error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @forecasts_bp.route('/generate-system', methods=['POST'])
@@ -82,9 +77,7 @@ def generate_system_forecast():
         }), 200
 
     except Exception as e:
-        print(f"System forecast error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logging.error(f"System forecast error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy import func, desc, or_
 import json
 import os
+import logging
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -430,5 +431,5 @@ def chat_message():
         return jsonify({"response": final})
 
     except Exception as e:
-        print(f"Chat error: {e}")
+        logging.error(f"Chat error: {e}")
         return jsonify({"error": "Chat service unavailable"}), 500

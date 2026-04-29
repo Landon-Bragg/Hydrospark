@@ -11,6 +11,7 @@ from sqlalchemy import func, case
 import bcrypt
 import secrets
 import re
+import logging
 
 admin_bp = Blueprint('admin', __name__)
 import_service = DataImportService()
@@ -636,7 +637,7 @@ def detect_anomalies():
         }), 200
 
     except Exception as e:
-        print(f"Anomaly detection error: {str(e)}")
+        logging.error(f"Anomaly detection error: {e}")
         return jsonify({'error': 'Anomaly detection failed. Make sure usage data has been imported.'}), 500
 
 
@@ -648,17 +649,9 @@ def import_usage_data():
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         
-        print(f"User ID: {user_id}")
-        print(f"User: {user}")
-        print(f"User role: {user.role if user else 'None'}")
-        
         if not user or user.role not in ['admin', 'billing']:
             return jsonify({'error': 'Admin access required'}), 403
-        
-        print(f"Request files: {request.files}")
-        print(f"Request form: {request.form}")
-        print(f"Request content type: {request.content_type}")
-        
+
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
         
@@ -667,16 +660,11 @@ def import_usage_data():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        print(f"Starting import of file: {file.filename}")
         result = import_service.import_usage_data(file)
-        print(f"Import completed: {result}")
-        
         return jsonify(result), 200
-        
+
     except Exception as e:
-        print(f"Import error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logging.error(f"Import error: {e}")
         return jsonify({'error': str(e)}), 500
     
 @admin_bp.route('/generate-historical-bills', methods=['POST'])
@@ -707,7 +695,7 @@ def generate_historical_bills():
         return jsonify(result), 200
 
     except Exception as e:
-        print(f"Historical bill generation error: {str(e)}")
+        logging.error(f"Historical bill generation error: {e}")
         return jsonify({'error': 'Bill generation failed. Make sure usage data has been imported first.'}), 500
 
 
